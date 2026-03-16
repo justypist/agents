@@ -13,7 +13,6 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "commitlint": "commitlint",
     "prepare": "husky"
   },
   "lint-staged": {
