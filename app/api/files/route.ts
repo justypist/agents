@@ -11,6 +11,27 @@ function isSupportedMediaType(mediaType: string) {
   return mediaType.startsWith("image/") || mediaType === "application/pdf";
 }
 
+function getPublicOrigin(request: Request) {
+  const originHeader = request.headers.get("origin");
+
+  if (originHeader) {
+    try {
+      return new URL(originHeader).origin;
+    } catch {}
+  }
+
+  const forwardedHost =
+    request.headers.get("x-forwarded-host") || request.headers.get("host");
+  const forwardedProto =
+    request.headers.get("x-forwarded-proto") || new URL(request.url).protocol.slice(0, -1);
+
+  if (forwardedHost) {
+    return `${forwardedProto}://${forwardedHost}`;
+  }
+
+  return new URL(request.url).origin;
+}
+
 export async function POST(request: Request) {
   const formData = await request.formData();
   const file = formData.get("file");
@@ -39,7 +60,7 @@ export async function POST(request: Request) {
 
   const response: UploadFileResponse = {
     id: storedFile.id,
-    url: new URL(`/api/files/${storedFile.id}`, request.url).toString(),
+    url: new URL(`/api/files/${storedFile.id}`, getPublicOrigin(request)).toString(),
     mediaType: storedFile.mediaType,
     filename: storedFile.filename,
   };
