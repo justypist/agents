@@ -1,4 +1,4 @@
-import { wrapProvider } from 'ai';
+import { wrapLanguageModel } from 'ai';
 import { createOpenAI, OpenAIResponsesProviderOptions } from '@ai-sdk/openai';
 import { devToolsMiddleware } from '@ai-sdk/devtools';
 import { config } from '@/config';
@@ -8,12 +8,10 @@ export const openaiProvider = createOpenAI({
   apiKey: config.ai.apiKey,
 });
 
-const wrappedOpenAIProvider = wrapProvider({
-  provider: openaiProvider,
-  languageModelMiddleware: config.env === 'development' ? [devToolsMiddleware()] : [],
+export const model = wrapLanguageModel({
+  model: openaiProvider.responses(config.ai.model.language),
+  middleware: config.env === 'development' ? devToolsMiddleware() : [],
 });
-
-export const model = wrappedOpenAIProvider.languageModel(config.ai.model.language);
 
 export const options = {
   model,
