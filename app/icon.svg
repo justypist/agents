@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Agents icon">
+  <rect width="64" height="64" rx="16" fill="#000" />
+  <path
+    d="M32 12 16 52h8.4l2.8-7.6h9.6L39.6 52H48L32 12Zm-1.6 14.4 4 11.2h-8.1l4.1-11.2Z"
+    fill="#fff"
+  />
+  <circle cx="47" cy="18" r="5" fill="#fff" />
+  <path d="M43.5 18h7" stroke="#000" stroke-width="2.2" stroke-linecap="round" />
+  <path d="M47 14.5v7" stroke="#000" stroke-width="2.2" stroke-linecap="round" />
+</svg>
