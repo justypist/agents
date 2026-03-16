@@ -1,0 +1,65 @@
+name: Dependency Update
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 3 * * 1'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: dependency-update
+  cancel-in-progress: false
+
+jobs:
+  dependency-update:
+    runs-on: ubuntu-latest
+    env:
+      CI: true
+      HUSKY: 0
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: package.json
+          cache: pnpm
+
+      - name: Update dependencies
+        run: pnpm update
+
+      - name: Verify lint
+        run: pnpm lint
+
+      - name: Verify typecheck
+        run: pnpm typecheck
+
+      - name: Verify build
+        run: pnpm build
+
+      - name: Create pull request
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: 'chore(deps): update dependencies'
+          branch: chore/dependency-update
+          delete-branch: true
+          title: 'chore(deps): update dependencies'
+          body: |
+            Automated dependency update created by GitHub Actions.
+
+            - Ran `pnpm update`
+            - Verified `pnpm lint`
+            - Verified `pnpm typecheck`
+            - Verified `pnpm build`
+            - Updated `package.json` and `pnpm-lock.yaml` when changes were available
+          labels: |
+            dependencies
