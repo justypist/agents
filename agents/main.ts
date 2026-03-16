@@ -1,5 +1,5 @@
 import { openaiProvider, options } from "@/lib/ai"
-import { stepCountIs, ToolLoopAgent } from "ai"
+import { InferAgentUIMessage, stepCountIs, ToolLoopAgent } from "ai"
 
 const instructions = "你是一个通用助手，语言言简意赅。"
 
@@ -15,3 +15,5 @@ export const MainAgent = new ToolLoopAgent({
     }),
   },
 })
+
+export type MainAgentUIMessage = InferAgentUIMessage<typeof MainAgent>
