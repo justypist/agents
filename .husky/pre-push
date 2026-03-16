@@ -1,1 +1,4 @@
-pnpm typecheck
+#!/usr/bin/env sh
+
+# Push 阶段不做本地校验，统一交给 GitHub Actions CI。
+exit 0
