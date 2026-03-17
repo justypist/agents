@@ -816,6 +816,7 @@ export function ChatPanel() {
           <textarea
             className="min-h-24 w-full resize-y border border-border bg-transparent px-3 py-2 text-sm outline-none disabled:cursor-not-allowed disabled:opacity-60"
             disabled={isInputLocked}
+            autoFocus
             id="chat-input"
             onChange={(event) => {
               setInput(event.target.value);
