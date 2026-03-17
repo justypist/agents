@@ -191,7 +191,7 @@ function MessageView({ message }: { message: MainAgentUIMessage }) {
             {"input" in part ? (
               <div className="mt-2">
                 <div className="mb-1 text-xs text-muted-foreground">input</div>
-                <pre className="whitespace-pre-wrap break-words font-mono text-xs">
+                <pre className="whitespace-pre-wrap wrap-break-word font-mono text-xs">
                   {formatValue(part.input)}
                 </pre>
               </div>
@@ -200,14 +200,14 @@ function MessageView({ message }: { message: MainAgentUIMessage }) {
             {"output" in part ? (
               <div className="mt-2">
                 <div className="mb-1 text-xs text-muted-foreground">output</div>
-                <pre className="whitespace-pre-wrap break-words font-mono text-xs">
+                <pre className="whitespace-pre-wrap wrap-break-word font-mono text-xs">
                   {formatValue(part.output)}
                 </pre>
               </div>
             ) : null}
 
             {"errorText" in part && part.errorText ? (
-              <pre className="mt-2 whitespace-pre-wrap break-words font-mono text-xs text-destructive">
+              <pre className="mt-2 whitespace-pre-wrap wrap-break-word font-mono text-xs text-destructive">
                 {part.errorText}
               </pre>
             ) : null}
