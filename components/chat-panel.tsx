@@ -35,6 +35,7 @@ type UploadedAttachment = {
 };
 
 const ATTACHMENT_ERROR_TEXT = "当前仅支持图片和 PDF 附件";
+const BOTTOM_THRESHOLD = 24;
 
 function getStatusText(status: "submitted" | "streaming" | "ready" | "error") {
   switch (status) {
@@ -266,16 +267,17 @@ export function ChatPanel() {
   const [attachmentError, setAttachmentError] = useState("");
   const [isUploadingAttachments, setIsUploadingAttachments] = useState(false);
   const [isDragActive, setIsDragActive] = useState(false);
-  const composerRef = useRef<HTMLDivElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const pendingAttachmentsRef = useRef<PendingAttachment[]>([]);
   const shouldStickToBottomRef = useRef(true);
-  const [composerHeight, setComposerHeight] = useState(0);
-  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+  const [isAtPageBottom, setIsAtPageBottom] = useState(true);
   const isPending = status === "submitted" || status === "streaming";
   const isBusy = isPending || isUploadingAttachments;
-  const canSubmit = input.trim().length > 0 || pendingAttachments.length > 0;
+  const isInputLocked = !isAtPageBottom;
+  const canSubmit =
+    !isInputLocked &&
+    (input.trim().length > 0 || pendingAttachments.length > 0);
   const statusText = isUploadingAttachments ? "上传附件中" : getStatusText(status);
 
   useEffect(() => {
@@ -296,35 +298,11 @@ export function ChatPanel() {
 
     const distanceFromBottom =
       document.documentElement.scrollHeight - (window.scrollY + window.innerHeight);
-    const isNearBottom = distanceFromBottom <= composerHeight + 120;
+    const isNearBottom = distanceFromBottom <= BOTTOM_THRESHOLD;
 
     shouldStickToBottomRef.current = isNearBottom;
-    setShowScrollToBottom(!isNearBottom);
+    setIsAtPageBottom(isNearBottom);
   });
-
-  useEffect(() => {
-    const composerElement = composerRef.current;
-    if (!composerElement) {
-      return;
-    }
-
-    const updateComposerHeight = () => {
-      setComposerHeight(composerElement.getBoundingClientRect().height);
-    };
-
-    updateComposerHeight();
-
-    const observer = new ResizeObserver(() => {
-      updateComposerHeight();
-      syncScrollState();
-    });
-
-    observer.observe(composerElement);
-
-    return () => {
-      observer.disconnect();
-    };
-  }, []);
 
   useEffect(() => {
     const frameId = window.requestAnimationFrame(() => {
@@ -343,14 +321,9 @@ export function ChatPanel() {
       window.removeEventListener("scroll", handleWindowScroll);
       window.removeEventListener("resize", handleWindowScroll);
     };
-  }, [composerHeight]);
+  }, []);
 
   useEffect(() => {
-    if (!shouldStickToBottomRef.current) {
-      return;
-    }
-
-    scrollWindowToBottom("auto");
     const frameId = window.requestAnimationFrame(() => {
       syncScrollState();
     });
@@ -461,7 +434,6 @@ export function ChatPanel() {
     }
 
     shouldStickToBottomRef.current = true;
-    setShowScrollToBottom(false);
     setInput("");
     setPendingAttachments([]);
     setAttachmentError("");
@@ -575,7 +547,6 @@ export function ChatPanel() {
   return (
     <section className="relative border border-border">
       <header className="border-b border-border px-3 py-2">
-        <div className="text-sm font-medium">Chat</div>
         <div className="text-xs text-muted-foreground">
           状态：{statusText}
         </div>
@@ -595,192 +566,193 @@ export function ChatPanel() {
         </div>
       </div>
 
-      <div style={{ height: composerHeight }} />
-
-      {showScrollToBottom ? (
+      {!isAtPageBottom ? (
         <button
           className="fixed right-4 bottom-4 z-20 border border-border bg-background px-3 py-1.5 text-sm shadow-sm"
           onClick={() => {
             shouldStickToBottomRef.current = true;
-            setShowScrollToBottom(false);
             scrollWindowToBottom("smooth");
           }}
-          style={{ bottom: `${composerHeight + 16}px` }}
           type="button"
         >
           滚动到底
         </button>
       ) : null}
 
-      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-10">
-        <div className="mx-auto w-full max-w-4xl px-4">
-          <div
-            className="pointer-events-auto border border-border bg-background/95 p-3 backdrop-blur supports-[backdrop-filter]:bg-background/80"
-            ref={composerRef}
-          >
-            {error ? (
-              <div className="mb-3 border border-destructive px-3 py-2 text-sm text-destructive">
-                {error.message}
-              </div>
-            ) : null}
-
-            {attachmentError ? (
-              <div className="mb-3 border border-destructive px-3 py-2 text-sm text-destructive">
-                {attachmentError}
-              </div>
-            ) : null}
-
-            <form
-              className={`relative ${isDragActive ? "border-dashed border-primary" : ""}`}
-              onDragEnter={handleDragEnter}
-              onDragLeave={handleDragLeave}
-              onDragOver={handleDragOver}
-              onDrop={handleDrop}
-              onSubmit={handleSubmit}
-            >
-              <input
-                accept="image/*,application/pdf"
-                className="hidden"
-                multiple
-                onChange={handleImageInputChange}
-                ref={imageInputRef}
-                type="file"
-              />
-              <input
-                accept="image/*,application/pdf"
-                className="hidden"
-                multiple
-                onChange={handleFileInputChange}
-                ref={fileInputRef}
-                type="file"
-              />
-
-              <label className="mb-2 block text-sm" htmlFor="chat-input">
-                输入
-              </label>
-
-              {pendingAttachments.length > 0 ? (
-                <div className="mb-3 flex flex-wrap gap-2">
-                  {pendingAttachments.map((attachment) => {
-                    const isImage = isImageMediaType(attachment.file.type);
-
-                    return (
-                      <div
-                        className="relative flex items-center gap-2 border border-border bg-background px-2 py-2"
-                        key={attachment.id}
-                      >
-                        {isImage && attachment.previewUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            alt={attachment.file.name}
-                            className="h-12 w-12 object-cover"
-                            src={attachment.previewUrl}
-                          />
-                        ) : (
-                          <div className="flex h-12 w-12 items-center justify-center border border-border text-xs text-muted-foreground">
-                            文件
-                          </div>
-                        )}
-
-                        <div className="min-w-0 max-w-48">
-                          <div className="truncate text-sm">
-                            {attachment.file.name}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {isImage ? "图片" : "附件"}
-                          </div>
-                        </div>
-
-                        <button
-                          className="border border-border px-2 py-1 text-xs"
-                          onClick={() => {
-                            removePendingAttachment(attachment.id);
-                          }}
-                          type="button"
-                        >
-                          移除
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : null}
-
-              <textarea
-                className="min-h-24 w-full resize-y border border-border bg-transparent px-3 py-2 text-sm outline-none"
-                id="chat-input"
-                onChange={(event) => {
-                  setInput(event.target.value);
-                }}
-                onKeyDown={handleKeyDown}
-                onPaste={handlePaste}
-                placeholder="输入问题，Enter 发送，Shift+Enter 换行。可点击按钮或直接拖入图片、PDF 附件。"
-                rows={4}
-                value={input}
-              />
-
-              {isDragActive ? (
-                <div className="pointer-events-none absolute inset-0 flex items-center justify-center border border-dashed border-primary bg-background/90 text-sm text-foreground">
-                  松开鼠标，添加图片或 PDF 附件
-                </div>
-              ) : null}
-
-              <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    className="border border-border px-3 py-1 text-sm"
-                    onClick={() => {
-                      imageInputRef.current?.click();
-                    }}
-                    type="button"
-                  >
-                    添加图片
-                  </button>
-                  <button
-                    className="border border-border px-3 py-1 text-sm"
-                    onClick={() => {
-                      fileInputRef.current?.click();
-                    }}
-                    type="button"
-                  >
-                    添加附件
-                  </button>
-                  {pendingAttachments.length > 0 ? (
-                    <button
-                      className="border border-border px-3 py-1 text-sm"
-                      onClick={clearPendingAttachments}
-                      type="button"
-                    >
-                      清空附件
-                    </button>
-                  ) : null}
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className="text-xs text-muted-foreground">
-                    Enter 发送，Shift+Enter 换行，支持图片/PDF 拖拽和粘贴图片
-                  </div>
-                  {isPending ? (
-                    <button
-                      className="border border-border px-3 py-1 text-sm"
-                      onClick={stop}
-                      type="button"
-                    >
-                      停止
-                    </button>
-                  ) : null}
-                  <button
-                    className="border border-border px-3 py-1 text-sm disabled:opacity-50"
-                    disabled={isBusy || !canSubmit}
-                    type="submit"
-                  >
-                    {isUploadingAttachments ? "上传中" : "发送"}
-                  </button>
-                </div>
-              </div>
-            </form>
+      <div className="border-t border-border bg-background p-3">
+        {error ? (
+          <div className="mb-3 border border-destructive px-3 py-2 text-sm text-destructive">
+            {error.message}
           </div>
-        </div>
+        ) : null}
+
+        {attachmentError ? (
+          <div className="mb-3 border border-destructive px-3 py-2 text-sm text-destructive">
+            {attachmentError}
+          </div>
+        ) : null}
+
+        {!isAtPageBottom ? (
+          <div className="mb-3 border border-border px-3 py-2 text-sm text-muted-foreground">
+            滑动到底部后才能输入或添加附件。
+          </div>
+        ) : null}
+
+        <form
+          className={`relative ${isDragActive ? "border-dashed border-primary" : ""}`}
+          onDragEnter={handleDragEnter}
+          onDragLeave={handleDragLeave}
+          onDragOver={handleDragOver}
+          onDrop={handleDrop}
+          onSubmit={handleSubmit}
+        >
+          <input
+            accept="image/*,application/pdf"
+            className="hidden"
+            multiple
+            onChange={handleImageInputChange}
+            ref={imageInputRef}
+            type="file"
+          />
+          <input
+            accept="image/*,application/pdf"
+            className="hidden"
+            multiple
+            onChange={handleFileInputChange}
+            ref={fileInputRef}
+            type="file"
+          />
+
+          <label className="mb-2 block text-sm" htmlFor="chat-input">
+            输入
+          </label>
+
+          {pendingAttachments.length > 0 ? (
+            <div className="mb-3 flex flex-wrap gap-2">
+              {pendingAttachments.map((attachment) => {
+                const isImage = isImageMediaType(attachment.file.type);
+
+                return (
+                  <div
+                    className="relative flex items-center gap-2 border border-border bg-background px-2 py-2"
+                    key={attachment.id}
+                  >
+                    {isImage && attachment.previewUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        alt={attachment.file.name}
+                        className="h-12 w-12 object-cover"
+                        src={attachment.previewUrl}
+                      />
+                    ) : (
+                      <div className="flex h-12 w-12 items-center justify-center border border-border text-xs text-muted-foreground">
+                        文件
+                      </div>
+                    )}
+
+                    <div className="min-w-0 max-w-48">
+                      <div className="truncate text-sm">
+                        {attachment.file.name}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {isImage ? "图片" : "附件"}
+                      </div>
+                    </div>
+
+                    <button
+                      className="border border-border px-2 py-1 text-xs disabled:opacity-50"
+                      disabled={isInputLocked || isBusy}
+                      onClick={() => {
+                        removePendingAttachment(attachment.id);
+                      }}
+                      type="button"
+                    >
+                      移除
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
+
+          <textarea
+            className="min-h-24 w-full resize-y border border-border bg-transparent px-3 py-2 text-sm outline-none disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={isInputLocked}
+            id="chat-input"
+            onChange={(event) => {
+              setInput(event.target.value);
+            }}
+            onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
+            placeholder={
+              isInputLocked
+                ? "滑动到底部后才能输入"
+                : "输入问题，Enter 发送，Shift+Enter 换行。可点击按钮或直接拖入图片、PDF 附件。"
+            }
+            rows={4}
+            value={input}
+          />
+
+          {isDragActive ? (
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center border border-dashed border-primary bg-background/90 text-sm text-foreground">
+              松开鼠标，添加图片或 PDF 附件
+            </div>
+          ) : null}
+
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                className="border border-border px-3 py-1 text-sm disabled:opacity-50"
+                disabled={isInputLocked || isBusy}
+                onClick={() => {
+                  imageInputRef.current?.click();
+                }}
+                type="button"
+              >
+                添加图片
+              </button>
+              <button
+                className="border border-border px-3 py-1 text-sm disabled:opacity-50"
+                disabled={isInputLocked || isBusy}
+                onClick={() => {
+                  fileInputRef.current?.click();
+                }}
+                type="button"
+              >
+                添加附件
+              </button>
+              {pendingAttachments.length > 0 ? (
+                <button
+                  className="border border-border px-3 py-1 text-sm disabled:opacity-50"
+                  disabled={isInputLocked || isBusy}
+                  onClick={clearPendingAttachments}
+                  type="button"
+                >
+                  清空附件
+                </button>
+              ) : null}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {isPending ? (
+                <button
+                  className="border border-border px-3 py-1 text-sm"
+                  onClick={stop}
+                  type="button"
+                >
+                  停止
+                </button>
+              ) : null}
+              <button
+                className="border border-border px-3 py-1 text-sm disabled:opacity-50"
+                disabled={isBusy || !canSubmit}
+                type="submit"
+              >
+                {isUploadingAttachments ? "上传中" : "发送"}
+              </button>
+            </div>
+          </div>
+        </form>
       </div>
     </section>
   );
