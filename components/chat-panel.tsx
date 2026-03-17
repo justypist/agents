@@ -10,7 +10,6 @@ import {
 } from "ai";
 import {
   useEffect,
-  useEffectEvent,
   useRef,
   useState,
   type ChangeEvent,
@@ -77,8 +76,12 @@ function formatValue(value: unknown) {
   }
 }
 
-function scrollWindowToBottom(behavior: ScrollBehavior) {
+function scrollWindowToBottom(
+  behavior: ScrollBehavior,
+  onComplete?: () => void
+) {
   if (typeof window === "undefined") {
+    onComplete?.();
     return;
   }
 
@@ -86,6 +89,35 @@ function scrollWindowToBottom(behavior: ScrollBehavior) {
     top: document.documentElement.scrollHeight,
     behavior,
   });
+
+  if (!onComplete) {
+    return;
+  }
+
+  if (behavior !== "smooth") {
+    window.requestAnimationFrame(() => {
+      onComplete();
+    });
+    return;
+  }
+
+  let frameCount = 0;
+
+  const waitForScrollEnd = () => {
+    const distanceFromBottom =
+      document.documentElement.scrollHeight -
+      (window.scrollY + window.innerHeight);
+
+    if (distanceFromBottom <= BOTTOM_THRESHOLD || frameCount >= 120) {
+      onComplete();
+      return;
+    }
+
+    frameCount += 1;
+    window.requestAnimationFrame(waitForScrollEnd);
+  };
+
+  window.requestAnimationFrame(waitForScrollEnd);
 }
 
 function isImageMediaType(mediaType: string) {
@@ -356,14 +388,14 @@ function MessageView({ message }: { message: MainAgentUIMessage }) {
           <summary className="cursor-pointer text-xs text-muted-foreground">
             reasoning
           </summary>
-          <pre className="mt-2 whitespace-pre-wrap break-words font-mono text-xs">
+          <pre className="mt-2 whitespace-pre-wrap wrap-break-word font-mono text-xs">
             {part.text}
           </pre>
         </details>
       ))}
 
       {text ? (
-        <div className="mt-2 whitespace-pre-wrap break-words">{text}</div>
+        <div className="mt-2 whitespace-pre-wrap wrap-break-word">{text}</div>
       ) : null}
 
       <MessageAttachments files={fileParts} />
@@ -404,6 +436,8 @@ export function ChatPanel() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const pendingAttachmentsRef = useRef<PendingAttachment[]>([]);
   const shouldStickToBottomRef = useRef(true);
+  const shouldFocusInputAfterScrollRef = useRef(false);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [isAtPageBottom, setIsAtPageBottom] = useState(true);
   const isPending = status === "submitted" || status === "streaming";
   const isBusy = isPending || isUploadingAttachments;
@@ -424,7 +458,7 @@ export function ChatPanel() {
     []
   );
 
-  const syncScrollState = useEffectEvent(() => {
+  const syncScrollState = () => {
     if (typeof window === "undefined") {
       return;
     }
@@ -435,7 +469,7 @@ export function ChatPanel() {
 
     shouldStickToBottomRef.current = isNearBottom;
     setIsAtPageBottom(isNearBottom);
-  });
+  };
 
   useEffect(() => {
     const frameId = window.requestAnimationFrame(() => {
@@ -465,6 +499,15 @@ export function ChatPanel() {
       window.cancelAnimationFrame(frameId);
     };
   }, [messages, status]);
+
+  useEffect(() => {
+    if (!isAtPageBottom || !shouldFocusInputAfterScrollRef.current) {
+      return;
+    }
+
+    shouldFocusInputAfterScrollRef.current = false;
+    textareaRef.current?.focus();
+  }, [isAtPageBottom]);
 
   async function uploadAttachment(file: File): Promise<UploadedAttachment> {
     const formData = new FormData();
@@ -709,7 +752,10 @@ export function ChatPanel() {
           className="fixed right-4 bottom-4 z-20 border border-border bg-background px-3 py-1.5 text-sm shadow-sm"
           onClick={() => {
             shouldStickToBottomRef.current = true;
-            scrollWindowToBottom("smooth");
+            scrollWindowToBottom("smooth", () => {
+              shouldFocusInputAfterScrollRef.current = true;
+              syncScrollState();
+            });
           }}
           type="button"
         >
@@ -828,6 +874,7 @@ export function ChatPanel() {
                 ? "滑动到底部后才能输入"
                 : "输入问题，Enter 发送，Shift+Enter 换行。可点击按钮或直接拖入图片、PDF 附件。"
             }
+            ref={textareaRef}
             rows={4}
             value={input}
           />
