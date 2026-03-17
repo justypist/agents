@@ -441,10 +441,7 @@ export function ChatPanel() {
   const [isAtPageBottom, setIsAtPageBottom] = useState(true);
   const isPending = status === "submitted" || status === "streaming";
   const isBusy = isPending || isUploadingAttachments;
-  const isInputLocked = !isAtPageBottom;
-  const canSubmit =
-    !isInputLocked &&
-    (input.trim().length > 0 || pendingAttachments.length > 0);
+  const canSubmit = input.trim().length > 0 || pendingAttachments.length > 0;
   const statusText = isUploadingAttachments ? "上传附件中" : getStatusText(status);
 
   useEffect(() => {
@@ -776,12 +773,6 @@ export function ChatPanel() {
           </div>
         ) : null}
 
-        {!isAtPageBottom ? (
-          <div className="mb-3 border border-border px-3 py-2 text-sm text-muted-foreground">
-            滑动到底部后才能输入或添加附件。
-          </div>
-        ) : null}
-
         <form
           className={`relative ${isDragActive ? "border-dashed border-primary" : ""}`}
           onDragEnter={handleDragEnter}
@@ -845,7 +836,7 @@ export function ChatPanel() {
 
                     <button
                       className="border border-border px-2 py-1 text-xs disabled:opacity-50"
-                      disabled={isInputLocked || isBusy}
+                      disabled={isBusy}
                       onClick={() => {
                         removePendingAttachment(attachment.id);
                       }}
@@ -861,7 +852,6 @@ export function ChatPanel() {
 
           <textarea
             className="min-h-24 w-full resize-y border border-border bg-transparent px-3 py-2 text-sm outline-none disabled:cursor-not-allowed disabled:opacity-60"
-            disabled={isInputLocked}
             autoFocus
             id="chat-input"
             onChange={(event) => {
@@ -869,11 +859,7 @@ export function ChatPanel() {
             }}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
-            placeholder={
-              isInputLocked
-                ? "滑动到底部后才能输入"
-                : "输入问题，Enter 发送，Shift+Enter 换行。可点击按钮或直接拖入图片、PDF 附件。"
-            }
+            placeholder="输入问题，Enter 发送，Shift+Enter 换行。可点击按钮或直接拖入图片、PDF 附件。"
             ref={textareaRef}
             rows={4}
             value={input}
@@ -889,7 +875,7 @@ export function ChatPanel() {
             <div className="flex flex-wrap items-center gap-2">
               <button
                 className="border border-border px-3 py-1 text-sm disabled:opacity-50"
-                disabled={isInputLocked || isBusy}
+                disabled={isBusy}
                 onClick={() => {
                   imageInputRef.current?.click();
                 }}
@@ -899,7 +885,7 @@ export function ChatPanel() {
               </button>
               <button
                 className="border border-border px-3 py-1 text-sm disabled:opacity-50"
-                disabled={isInputLocked || isBusy}
+                disabled={isBusy}
                 onClick={() => {
                   fileInputRef.current?.click();
                 }}
@@ -910,7 +896,7 @@ export function ChatPanel() {
               {pendingAttachments.length > 0 ? (
                 <button
                   className="border border-border px-3 py-1 text-sm disabled:opacity-50"
-                  disabled={isInputLocked || isBusy}
+                  disabled={isBusy}
                   onClick={clearPendingAttachments}
                   type="button"
                 >
