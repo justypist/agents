@@ -1,0 +1,121 @@
+name: CD
+
+on:
+  workflow_run:
+    workflows:
+      - Docker Publish
+    types:
+      - completed
+
+jobs:
+  deploy:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      DEPLOY_CONN_STR: ${{ secrets.DEPLOY_CONN_STR }}
+      SERVER_URL: ${{ github.server_url }}
+      REPOSITORY: ${{ github.repository }}
+      HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+
+    steps:
+      - name: Parse deploy config
+        id: prep
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ -z "${DEPLOY_CONN_STR}" ]; then
+            echo "DEPLOY_CONN_STR secret is required" >&2
+            exit 1
+          fi
+
+          if [ -z "${HEAD_SHA}" ]; then
+            echo "workflow_run.head_sha is required" >&2
+            exit 1
+          fi
+
+          deploy_target="${DEPLOY_CONN_STR%%:*}"
+          deploy_rest="${DEPLOY_CONN_STR#*:}"
+
+          if [ "${deploy_target}" = "${DEPLOY_CONN_STR}" ] || [ -z "${deploy_rest}" ]; then
+            echo "DEPLOY_CONN_STR format invalid: expected <user>@<host>:<port>:<compose_path>:<pri_key>" >&2
+            exit 1
+          fi
+
+          deploy_port="${deploy_rest%%:*}"
+          deploy_rest="${deploy_rest#*:}"
+          compose_path="${deploy_rest%%:*}"
+          private_key="${deploy_rest#*:}"
+
+          if [ -z "${deploy_target}" ] || [ -z "${deploy_port}" ] || [ -z "${compose_path}" ] || [ -z "${private_key}" ]; then
+            echo "DEPLOY_CONN_STR contains empty segment" >&2
+            exit 1
+          fi
+
+          if ! printf '%s' "${deploy_target}" | grep -q '@'; then
+            echo "DEPLOY_CONN_STR target must be <user>@<host>" >&2
+            exit 1
+          fi
+
+          registry="${SERVER_URL#https://}"
+          registry="${registry#http://}"
+          registry="${registry,,}"
+          repository="${REPOSITORY,,}"
+          short_sha="$(printf '%s' "${HEAD_SHA}" | cut -c1-12)"
+          image="${registry}/${repository}:sha-${short_sha}"
+
+          case "${compose_path}" in
+            *.yml|*.yaml)
+              compose_dir="$(dirname "${compose_path}")"
+              compose_file="$(basename "${compose_path}")"
+              ;;
+            *)
+              compose_dir="${compose_path}"
+              compose_file=""
+              ;;
+          esac
+
+          {
+            echo "deploy_target=${deploy_target}"
+            echo "deploy_port=${deploy_port}"
+            echo "compose_dir=${compose_dir}"
+            echo "compose_file=${compose_file}"
+            echo "image=${image}"
+            echo "private_key<<EOF"
+            printf '%b\n' "${private_key}"
+            echo "EOF"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Write SSH key
+        shell: bash
+        env:
+          PRIVATE_KEY: ${{ steps.prep.outputs.private_key }}
+        run: |
+          set -euo pipefail
+          install -m 600 /dev/null deploy.key
+          printf '%s\n' "${PRIVATE_KEY}" > deploy.key
+
+      - name: Deploy
+        shell: bash
+        env:
+          DEPLOY_TARGET: ${{ steps.prep.outputs.deploy_target }}
+          DEPLOY_PORT: ${{ steps.prep.outputs.deploy_port }}
+          COMPOSE_DIR: ${{ steps.prep.outputs.compose_dir }}
+          COMPOSE_FILE: ${{ steps.prep.outputs.compose_file }}
+          IMAGE_NAME: ${{ steps.prep.outputs.image }}
+        run: |
+          set -euo pipefail
+
+          remote_command="cd '${COMPOSE_DIR}' && IMAGE_NAME='${IMAGE_NAME}' docker compose pull && IMAGE_NAME='${IMAGE_NAME}' docker compose up -d"
+          if [ -n "${COMPOSE_FILE}" ]; then
+            remote_command="cd '${COMPOSE_DIR}' && IMAGE_NAME='${IMAGE_NAME}' docker compose -f '${COMPOSE_FILE}' pull && IMAGE_NAME='${IMAGE_NAME}' docker compose -f '${COMPOSE_FILE}' up -d"
+          fi
+
+          ssh -i deploy.key \
+            -p "${DEPLOY_PORT}" \
+            -o StrictHostKeyChecking=no \
+            -o UserKnownHostsFile=/dev/null \
+            "${DEPLOY_TARGET}" \
+            "set -euo pipefail && ${remote_command}"
