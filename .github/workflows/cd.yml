@@ -14,7 +14,8 @@ jobs:
     permissions:
       contents: read
     env:
-      DEPLOY_CONN_STR: ${{ secrets.DEPLOY_CONN_STR }}
+      DEPLOY_CONN_STR: ${{ vars.DEPLOY_CONN_STR }}
+      DEPLOY_PRIVATE_KEY: ${{ secrets.DEPLOY_PRIVATE_KEY }}
       SERVER_URL: ${{ github.server_url }}
       REPOSITORY: ${{ github.repository }}
       HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
@@ -27,7 +28,7 @@ jobs:
           set -euo pipefail
 
           if [ -z "${DEPLOY_CONN_STR}" ]; then
-            echo "DEPLOY_CONN_STR secret is required" >&2
+            echo "DEPLOY_CONN_STR variable is required" >&2
             exit 1
           fi
 
@@ -36,19 +37,17 @@ jobs:
             exit 1
           fi
 
-          private_key="${DEPLOY_CONN_STR##*:}"
+          compose_path="${DEPLOY_CONN_STR##*:}"
           deploy_rest="${DEPLOY_CONN_STR%:*}"
-          compose_path="${deploy_rest##*:}"
-          deploy_rest="${deploy_rest%:*}"
           deploy_port="${deploy_rest##*:}"
           deploy_target="${deploy_rest%:*}"
 
-          if [ "${private_key}" = "${DEPLOY_CONN_STR}" ] || [ -z "${deploy_rest}" ]; then
-            echo "DEPLOY_CONN_STR format invalid: expected <user>@<host>:<port>:<compose_path>:<pri_key>" >&2
+          if [ "${compose_path}" = "${DEPLOY_CONN_STR}" ] || [ -z "${deploy_rest}" ]; then
+            echo "DEPLOY_CONN_STR format invalid: expected <user>@<host>:<port>:<compose_path>" >&2
             exit 1
           fi
 
-          if [ -z "${deploy_target}" ] || [ -z "${deploy_port}" ] || [ -z "${compose_path}" ] || [ -z "${private_key}" ]; then
+          if [ -z "${deploy_target}" ] || [ -z "${deploy_port}" ] || [ -z "${compose_path}" ]; then
             echo "DEPLOY_CONN_STR contains empty segment" >&2
             exit 1
           fi
@@ -87,19 +86,22 @@ jobs:
             echo "compose_dir=${compose_dir}"
             echo "compose_file=${compose_file}"
             echo "image=${image}"
-            echo "private_key<<EOF"
-            printf '%b\n' "${private_key}"
-            echo "EOF"
           } >> "${GITHUB_OUTPUT}"
 
       - name: Write SSH key
         shell: bash
         env:
-          PRIVATE_KEY: ${{ steps.prep.outputs.private_key }}
+          PRIVATE_KEY: ${{ env.DEPLOY_PRIVATE_KEY }}
         run: |
           set -euo pipefail
+
+          if [ -z "${PRIVATE_KEY}" ]; then
+            echo "DEPLOY_PRIVATE_KEY secret is required" >&2
+            exit 1
+          fi
+
           install -m 600 /dev/null deploy.key
-          printf '%s\n' "${PRIVATE_KEY}" > deploy.key
+          printf '%b\n' "${PRIVATE_KEY}" > deploy.key
 
       - name: Deploy
         shell: bash
