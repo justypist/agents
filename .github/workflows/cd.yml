@@ -1,24 +1,95 @@
 name: CD
 
 on:
-  workflow_run:
-    workflows:
-      - Docker Publish
-    types:
-      - completed
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
 
 jobs:
+  docker:
+    runs-on: ubuntu-latest
+    env:
+      CI: true
+    outputs:
+      image: ${{ steps.prep.outputs.image }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare image metadata
+        id: prep
+        env:
+          DEFAULT_USERNAME: ${{ github.actor }}
+          DEFAULT_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
+          INPUT_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
+          SERVER_URL: ${{ github.server_url }}
+          REPOSITORY: ${{ github.repository }}
+          REF_NAME: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          SHA: ${{ github.sha }}
+        run: |
+          registry="${SERVER_URL#https://}"
+          registry="${registry#http://}"
+          registry="${registry,,}"
+          image="${registry}/${REPOSITORY,,}"
+          short_sha="$(printf '%s' "${SHA}" | cut -c1-12)"
+
+          username="${INPUT_USERNAME:-$DEFAULT_USERNAME}"
+          password="${INPUT_PASSWORD:-$DEFAULT_PASSWORD}"
+
+          {
+            echo "registry=${registry}"
+            echo "image=${image}:sha-${short_sha}"
+            echo "username=${username}"
+            echo "password=${password}"
+            echo "tags<<EOF"
+            echo "${image}:sha-${short_sha}"
+
+            if [ "${REF_TYPE}" = "branch" ] && [ "${REF_NAME}" = "main" ]; then
+              echo "${image}:latest"
+            fi
+
+            if [ "${REF_TYPE}" = "tag" ]; then
+              echo "${image}:${REF_NAME}"
+            fi
+
+            echo "EOF"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Gitea Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ steps.prep.outputs.registry }}
+          username: ${{ steps.prep.outputs.username }}
+          password: ${{ steps.prep.outputs.password }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.prep.outputs.tags }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+
   deploy:
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    needs: docker
+    if: ${{ needs.docker.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
     env:
       DEPLOY_CONN_STR: ${{ vars.DEPLOY_CONN_STR }}
       DEPLOY_PRIVATE_KEY: ${{ secrets.DEPLOY_PRIVATE_KEY }}
-      SERVER_URL: ${{ github.server_url }}
-      REPOSITORY: ${{ github.repository }}
-      HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+      IMAGE_NAME: ${{ needs.docker.outputs.image }}
 
     steps:
       - name: Parse deploy config
@@ -32,8 +103,8 @@ jobs:
             exit 1
           fi
 
-          if [ -z "${HEAD_SHA}" ]; then
-            echo "workflow_run.head_sha is required" >&2
+          if [ -z "${IMAGE_NAME}" ]; then
+            echo "image output is required" >&2
             exit 1
           fi
 
@@ -62,13 +133,6 @@ jobs:
             exit 1
           fi
 
-          registry="${SERVER_URL#https://}"
-          registry="${registry#http://}"
-          registry="${registry,,}"
-          repository="${REPOSITORY,,}"
-          short_sha="$(printf '%s' "${HEAD_SHA}" | cut -c1-12)"
-          image="${registry}/${repository}:sha-${short_sha}"
-
           case "${compose_path}" in
             *.yml|*.yaml)
               compose_dir="$(dirname "${compose_path}")"
@@ -85,7 +149,6 @@ jobs:
             echo "deploy_port=${deploy_port}"
             echo "compose_dir=${compose_dir}"
             echo "compose_file=${compose_file}"
-            echo "image=${image}"
           } >> "${GITHUB_OUTPUT}"
 
       - name: Write SSH key
@@ -110,7 +173,7 @@ jobs:
           DEPLOY_PORT: ${{ steps.prep.outputs.deploy_port }}
           COMPOSE_DIR: ${{ steps.prep.outputs.compose_dir }}
           COMPOSE_FILE: ${{ steps.prep.outputs.compose_file }}
-          IMAGE_NAME: ${{ steps.prep.outputs.image }}
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
         run: |
           set -euo pipefail
 
