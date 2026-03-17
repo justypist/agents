@@ -35,7 +35,13 @@ type UploadedAttachment = {
 };
 
 const ATTACHMENT_ERROR_TEXT = "当前仅支持图片和 PDF 附件";
+const ABORTED_TOOL_ERROR_TEXT = "用户已停止本次执行";
 const BOTTOM_THRESHOLD = 24;
+
+type MainAgentMessagePart = MainAgentUIMessage["parts"][number];
+type SearchToolUIPart = Extract<MainAgentMessagePart, { type: "tool-search" }>;
+type ExecToolUIPart = Extract<MainAgentMessagePart, { type: "tool-exec" }>;
+type DynamicToolUIPart = Extract<MainAgentMessagePart, { type: "dynamic-tool" }>;
 
 function getStatusText(status: "submitted" | "streaming" | "ready" | "error") {
   switch (status) {
@@ -112,6 +118,133 @@ function getErrorMessage(error: unknown) {
   }
 
   return "请求失败";
+}
+
+function finalizeSearchToolPart(part: SearchToolUIPart): SearchToolUIPart {
+  if (part.state === "input-streaming") {
+    return {
+      type: part.type,
+      toolCallId: part.toolCallId,
+      title: part.title,
+      providerExecuted: part.providerExecuted,
+      state: "output-error",
+      input: undefined,
+      rawInput: part.input,
+      errorText: ABORTED_TOOL_ERROR_TEXT,
+      callProviderMetadata: part.callProviderMetadata,
+    };
+  }
+
+  if (part.state === "input-available") {
+    return {
+      type: part.type,
+      toolCallId: part.toolCallId,
+      title: part.title,
+      providerExecuted: part.providerExecuted,
+      state: "output-error",
+      input: part.input,
+      errorText: ABORTED_TOOL_ERROR_TEXT,
+      callProviderMetadata: part.callProviderMetadata,
+    };
+  }
+
+  return part;
+}
+
+function finalizeExecToolPart(part: ExecToolUIPart): ExecToolUIPart {
+  if (part.state === "input-streaming") {
+    return {
+      type: part.type,
+      toolCallId: part.toolCallId,
+      title: part.title,
+      providerExecuted: part.providerExecuted,
+      state: "output-error",
+      input: undefined,
+      rawInput: part.input,
+      errorText: ABORTED_TOOL_ERROR_TEXT,
+      callProviderMetadata: part.callProviderMetadata,
+    };
+  }
+
+  if (part.state === "input-available") {
+    return {
+      type: part.type,
+      toolCallId: part.toolCallId,
+      title: part.title,
+      providerExecuted: part.providerExecuted,
+      state: "output-error",
+      input: part.input,
+      errorText: ABORTED_TOOL_ERROR_TEXT,
+      callProviderMetadata: part.callProviderMetadata,
+    };
+  }
+
+  return part;
+}
+
+function finalizeDynamicToolPart(part: DynamicToolUIPart): DynamicToolUIPart {
+  if (part.state !== "input-streaming" && part.state !== "input-available") {
+    return part;
+  }
+
+  return {
+    type: part.type,
+    toolName: part.toolName,
+    toolCallId: part.toolCallId,
+    title: part.title,
+    providerExecuted: part.providerExecuted,
+    state: "output-error",
+    input: part.input,
+    errorText: ABORTED_TOOL_ERROR_TEXT,
+    callProviderMetadata: part.callProviderMetadata,
+  };
+}
+
+function finalizePendingToolParts(messages: MainAgentUIMessage[]) {
+  return messages.map((message) => {
+    if (message.role !== "assistant") {
+      return message;
+    }
+
+    let didChange = false;
+    const parts = message.parts.map((part) => {
+      if (!isToolUIPart(part)) {
+        return part;
+      }
+
+      const isPendingToolPart =
+        part.state === "input-streaming" || part.state === "input-available";
+
+      if (!isPendingToolPart) {
+        return part;
+      }
+
+      didChange = true;
+
+      if (part.type === "tool-search") {
+        return finalizeSearchToolPart(part);
+      }
+
+      if (part.type === "tool-exec") {
+        return finalizeExecToolPart(part);
+      }
+
+      if (part.type === "dynamic-tool") {
+        return finalizeDynamicToolPart(part);
+      }
+
+      return part;
+    });
+
+    if (!didChange) {
+      return message;
+    }
+
+    return {
+      ...message,
+      parts,
+    };
+  });
 }
 
 function MessageAttachments({ files }: { files: FileUIPart[] }) {
@@ -197,7 +330,7 @@ function MessageView({ message }: { message: MainAgentUIMessage }) {
               </div>
             ) : null}
 
-            {"output" in part ? (
+            {part.state === "output-available" ? (
               <div className="mt-2">
                 <div className="mb-1 text-xs text-muted-foreground">output</div>
                 <pre className="whitespace-pre-wrap wrap-break-word font-mono text-xs">
@@ -258,7 +391,7 @@ function MessageView({ message }: { message: MainAgentUIMessage }) {
 }
 
 export function ChatPanel() {
-  const { messages, sendMessage, status, stop, error } =
+  const { messages, sendMessage, setMessages, status, stop, error } =
     useChat<MainAgentUIMessage>();
   const [input, setInput] = useState("");
   const [pendingAttachments, setPendingAttachments] = useState<
@@ -544,6 +677,11 @@ export function ChatPanel() {
     appendFiles(files);
   }
 
+  function handleStop() {
+    stop();
+    setMessages((currentMessages) => finalizePendingToolParts(currentMessages));
+  }
+
   return (
     <section className="relative border border-border">
       <header className="border-b border-border px-3 py-2">
@@ -737,7 +875,7 @@ export function ChatPanel() {
               {isPending ? (
                 <button
                   className="border border-border px-3 py-1 text-sm"
-                  onClick={stop}
+                  onClick={handleStop}
                   type="button"
                 >
                   停止

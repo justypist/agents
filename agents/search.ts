@@ -1,5 +1,6 @@
 import { asTool as createAgentTool } from "@/utils/as-tool"
-import { openaiProvider, options } from "@/lib/ai"
+import { options } from "@/lib/ai"
+import { webSearchTool } from "@/tools/search"
 import { InferAgentUIMessage, stepCountIs, ToolLoopAgent } from "ai"
 import { z } from "zod"
 
@@ -18,10 +19,7 @@ export const SearchAgent = new ToolLoopAgent({
   instructions,
   stopWhen: [stepCountIs(8)],
   tools: {
-    webSearch: openaiProvider.tools.webSearch({
-      externalWebAccess: true,
-      searchContextSize: "high",
-    }),
+    webSearch: webSearchTool,
   },
 })
 

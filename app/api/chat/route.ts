@@ -1,5 +1,5 @@
 import { MainAgent, type MainAgentUIMessage } from "@/agents/main"
-import { createAgentUIStreamResponse } from "ai"
+import { convertToModelMessages, validateUIMessages } from "ai"
 
 type ChatRequestBody = {
   messages: MainAgentUIMessage[]
@@ -15,10 +15,23 @@ export async function POST(request: Request) {
     )
   }
 
-  return createAgentUIStreamResponse({
-    agent: MainAgent,
-    uiMessages: body.messages,
+  const validatedMessages = await validateUIMessages<MainAgentUIMessage>({
+    messages: body.messages,
+    tools: MainAgent.tools,
+  })
+
+  const modelMessages = await convertToModelMessages(validatedMessages, {
+    tools: MainAgent.tools,
+    ignoreIncompleteToolCalls: true,
+  })
+
+  const result = await MainAgent.stream({
+    prompt: modelMessages,
     abortSignal: request.signal,
+  })
+
+  return result.toUIMessageStreamResponse({
+    originalMessages: validatedMessages,
     sendSources: true,
   })
 }
