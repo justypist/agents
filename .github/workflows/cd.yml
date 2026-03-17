@@ -36,18 +36,17 @@ jobs:
             exit 1
           fi
 
-          deploy_target="${DEPLOY_CONN_STR%%:*}"
-          deploy_rest="${DEPLOY_CONN_STR#*:}"
+          private_key="${DEPLOY_CONN_STR##*:}"
+          deploy_rest="${DEPLOY_CONN_STR%:*}"
+          compose_path="${deploy_rest##*:}"
+          deploy_rest="${deploy_rest%:*}"
+          deploy_port="${deploy_rest##*:}"
+          deploy_target="${deploy_rest%:*}"
 
-          if [ "${deploy_target}" = "${DEPLOY_CONN_STR}" ] || [ -z "${deploy_rest}" ]; then
+          if [ "${private_key}" = "${DEPLOY_CONN_STR}" ] || [ -z "${deploy_rest}" ]; then
             echo "DEPLOY_CONN_STR format invalid: expected <user>@<host>:<port>:<compose_path>:<pri_key>" >&2
             exit 1
           fi
-
-          deploy_port="${deploy_rest%%:*}"
-          deploy_rest="${deploy_rest#*:}"
-          compose_path="${deploy_rest%%:*}"
-          private_key="${deploy_rest#*:}"
 
           if [ -z "${deploy_target}" ] || [ -z "${deploy_port}" ] || [ -z "${compose_path}" ] || [ -z "${private_key}" ]; then
             echo "DEPLOY_CONN_STR contains empty segment" >&2
@@ -56,6 +55,11 @@ jobs:
 
           if ! printf '%s' "${deploy_target}" | grep -q '@'; then
             echo "DEPLOY_CONN_STR target must be <user>@<host>" >&2
+            exit 1
+          fi
+
+          if ! printf '%s' "${deploy_port}" | grep -Eq '^[0-9]+$'; then
+            echo "DEPLOY_CONN_STR port must be numeric" >&2
             exit 1
           fi
 
