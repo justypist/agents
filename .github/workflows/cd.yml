@@ -7,6 +7,9 @@ on:
 jobs:
   docker:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     env:
       CI: true
     outputs:
@@ -21,6 +24,7 @@ jobs:
         env:
           DEFAULT_USERNAME: ${{ github.actor }}
           DEFAULT_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_REGISTRY: ${{ vars.REGISTRY_HOST }}
           INPUT_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
           INPUT_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
           SERVER_URL: ${{ github.server_url }}
@@ -29,9 +33,17 @@ jobs:
           REF_TYPE: ${{ github.ref_type }}
           SHA: ${{ github.sha }}
         run: |
-          registry="${SERVER_URL#https://}"
-          registry="${registry#http://}"
-          registry="${registry,,}"
+          registry="${INPUT_REGISTRY}"
+          if [ -z "${registry}" ]; then
+            registry="${SERVER_URL#https://}"
+            registry="${registry#http://}"
+            registry="${registry,,}"
+
+            if [ "${registry}" = "github.com" ]; then
+              registry="ghcr.io"
+            fi
+          fi
+
           image="${registry}/${REPOSITORY,,}"
           short_sha="$(printf '%s' "${SHA}" | cut -c1-12)"
 
@@ -60,7 +72,7 @@ jobs:
       - name: Setup Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Login to Gitea Registry
+      - name: Login to Container Registry
         uses: docker/login-action@v3
         with:
           registry: ${{ steps.prep.outputs.registry }}
@@ -186,3 +198,49 @@ jobs:
             -o UserKnownHostsFile=/dev/null \
             "${DEPLOY_TARGET}" \
             "set -euo pipefail && ${remote_command}"
+
+# ### Variables
+
+# 在 `Settings > Secrets and variables > Actions > Variables` 中添加：
+
+# ```env
+# # 部署目标，格式固定：
+# # <user>@<host>:<port>:<compose_path>
+# # compose_path 可以是目录，也可以是 compose 文件路径
+# DEPLOY_CONN_STR=deploy@example.com:22:/opt/agents/compose.yaml
+
+# # 可选，默认不填时：
+# # GitHub 仓库会自动使用 ghcr.io
+# # 只有你要推送到别的镜像仓库时才需要设置
+# REGISTRY_HOST=ghcr.io
+# ```
+
+# `DEPLOY_CONN_STR` 合法示例：
+
+# ```text
+# deploy@example.com:22:/opt/agents
+# deploy@example.com:22:/opt/agents/compose.yaml
+# root@192.168.1.10:2222:/srv/agents/compose.yml
+# ```
+
+# ### Secrets
+
+# 在 `Settings > Secrets and variables > Actions > Secrets` 中添加：
+
+# ```env
+# # 用于 SSH 登录部署机器的私钥内容
+# # 直接粘贴完整私钥，多行保留
+# DEPLOY_PRIVATE_KEY=-----BEGIN OPENSSH PRIVATE KEY-----
+# <private_key_content>
+# -----END OPENSSH PRIVATE KEY-----
+
+# # 可选，推送非默认镜像仓库时使用
+# REGISTRY_USERNAME=<registry_username>
+# REGISTRY_PASSWORD=<registry_password>
+# ```
+
+# 说明：
+
+# - 推送 `ghcr.io` 时，默认使用 `GITHUB_TOKEN`，通常不需要额外设置 `REGISTRY_USERNAME` / `REGISTRY_PASSWORD`
+# - 如果服务器拉取的是私有 `ghcr.io/justypist/agents` 镜像，需要先在服务器执行 `docker login ghcr.io`
+# - 默认部署镜像为 `ghcr.io/justypist/agents:latest`，也可以通过 `IMAGE_NAME` 覆盖

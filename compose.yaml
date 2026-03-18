@@ -1,6 +1,6 @@
 services:
   web:
-    image: ${IMAGE_NAME:-gitea.typist.cc/typist/agents:latest}
+    image: ${IMAGE_NAME:-ghcr.io/justypist/agents:latest}
     pull_policy: always
     restart: unless-stopped
     ports:
