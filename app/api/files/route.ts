@@ -1,68 +1,73 @@
-import { saveUpload } from "@/lib/upload-store";
+import { createPresignedUpload } from "@/lib/oss";
 
-type UploadFileResponse = {
+type CreateFileUploadRequest = {
+  filename: string;
+  mediaType: string;
+  size: number;
+};
+
+type CreateFileUploadResponse = {
   id: string;
   url: string;
   mediaType: string;
   filename: string;
+  size: number;
+  uploadUrl: string;
+  uploadMethod: "PUT";
+  uploadHeaders: Record<string, string>;
 };
 
-function isSupportedMediaType(mediaType: string) {
+function isSupportedMediaType(mediaType: string): boolean {
   return mediaType.startsWith("image/") || mediaType === "application/pdf";
 }
 
-function getPublicOrigin(request: Request) {
-  const originHeader = request.headers.get("origin");
-
-  if (originHeader) {
-    try {
-      return new URL(originHeader).origin;
-    } catch {}
-  }
-
-  const forwardedHost =
-    request.headers.get("x-forwarded-host") || request.headers.get("host");
-  const forwardedProto =
-    request.headers.get("x-forwarded-proto") || new URL(request.url).protocol.slice(0, -1);
-
-  if (forwardedHost) {
-    return `${forwardedProto}://${forwardedHost}`;
-  }
-
-  return new URL(request.url).origin;
+function isValidRequestBody(body: unknown): body is CreateFileUploadRequest {
+  return (
+    typeof body === "object" &&
+    body !== null &&
+    "filename" in body &&
+    "mediaType" in body &&
+    "size" in body &&
+    typeof body.filename === "string" &&
+    typeof body.mediaType === "string" &&
+    typeof body.size === "number" &&
+    Number.isFinite(body.size) &&
+    body.size >= 0
+  );
 }
 
-export async function POST(request: Request) {
-  const formData = await request.formData();
-  const file = formData.get("file");
+export async function POST(request: Request): Promise<Response> {
+  const body = (await request.json().catch(() => null)) as unknown;
 
-  if (!(file instanceof File)) {
+  if (!isValidRequestBody(body)) {
     return Response.json(
-      { error: "file 字段缺失" },
+      { error: "请求参数不合法" },
       { status: 400 }
     );
   }
 
-  if (!isSupportedMediaType(file.type)) {
+  if (!isSupportedMediaType(body.mediaType)) {
     return Response.json(
       { error: "当前仅支持图片和 PDF 附件" },
       { status: 415 }
     );
   }
 
-  const data = new Uint8Array(await file.arrayBuffer());
-  const storedFile = await saveUpload({
-    data,
-    filename: file.name || "upload",
-    mediaType: file.type,
-    size: file.size,
+  const upload = await createPresignedUpload({
+    filename: body.filename || "upload",
+    mediaType: body.mediaType,
+    size: body.size,
   });
 
-  const response: UploadFileResponse = {
-    id: storedFile.id,
-    url: new URL(`/api/files/${storedFile.id}`, getPublicOrigin(request)).toString(),
-    mediaType: storedFile.mediaType,
-    filename: storedFile.filename,
+  const response: CreateFileUploadResponse = {
+    id: upload.id,
+    url: upload.url,
+    mediaType: upload.mediaType,
+    filename: upload.filename,
+    size: upload.size,
+    uploadUrl: upload.uploadUrl,
+    uploadMethod: upload.uploadMethod,
+    uploadHeaders: upload.uploadHeaders,
   };
 
   return Response.json(response);
