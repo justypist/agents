@@ -6,6 +6,11 @@
       "sourceType": "github",
       "computedHash": "58ce68f628890c3925aea2b5435a649251ac182057541045c68fc19a27aaa0ec"
     },
+    "postgres-drizzle": {
+      "source": "ccheney/robust-skills",
+      "sourceType": "github",
+      "computedHash": "60534e1aa880981e26360db836115df77a8e73be219c7a027e635802686b5bd9"
+    },
     "shadcn": {
       "source": "shadcn/ui",
       "sourceType": "github",
