@@ -15,7 +15,11 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "tmp": "tsx tmp/main.ts"
+    "tmp": "tsx tmp/main.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:sync": "pnpm db:generate && pnpm db:migrate",
+    "db:studio": "drizzle-kit studio"
   },
   "lint-staged": {
     "*.{js,jsx,ts,tsx,mjs,cjs}": [
