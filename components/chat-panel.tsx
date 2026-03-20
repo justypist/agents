@@ -33,6 +33,12 @@ type UploadedAttachment = {
   url: string;
 };
 
+type PresignedAttachmentUpload = UploadedAttachment & {
+  uploadUrl: string;
+  uploadMethod: "PUT";
+  uploadHeaders: Record<string, string>;
+};
+
 const ATTACHMENT_ERROR_TEXT = "当前仅支持图片和 PDF 附件";
 const ABORTED_TOOL_ERROR_TEXT = "用户已停止本次执行";
 const BOTTOM_THRESHOLD = 24;
@@ -507,25 +513,42 @@ export function ChatPanel() {
   }, [isAtPageBottom]);
 
   async function uploadAttachment(file: File): Promise<UploadedAttachment> {
-    const formData = new FormData();
-    formData.set("file", file);
-
-    const response = await fetch("/api/files", {
+    const signResponse = await fetch("/api/files", {
       method: "POST",
-      body: formData,
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        filename: file.name || "upload",
+        mediaType: file.type,
+        size: file.size,
+      }),
     });
 
-    if (!response.ok) {
-      const result = (await response.json().catch(() => null)) as
+    if (!signResponse.ok) {
+      const result = (await signResponse.json().catch(() => null)) as
         | { error?: string }
         | null;
 
       throw new Error(result?.error || "附件上传失败");
     }
 
-    const result = (await response.json()) as UploadedAttachment;
+    const result = (await signResponse.json()) as PresignedAttachmentUpload;
+    const uploadResponse = await fetch(result.uploadUrl, {
+      method: result.uploadMethod,
+      headers: result.uploadHeaders,
+      body: file,
+    });
 
-    return result;
+    if (!uploadResponse.ok) {
+      throw new Error("附件直传失败");
+    }
+
+    return {
+      filename: result.filename,
+      mediaType: result.mediaType,
+      url: result.url,
+    };
   }
 
   function appendFiles(fileList: FileList | File[]) {
