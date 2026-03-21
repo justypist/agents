@@ -30,7 +30,7 @@ export async function POST(request: Request) {
     abortSignal: request.signal,
   })
 
-  return result.toUIMessageStreamResponse({
+  return result.toUIMessageStreamResponse<MainAgentUIMessage>({
     originalMessages: validatedMessages,
     sendSources: true,
   })

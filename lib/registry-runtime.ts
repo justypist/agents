@@ -325,7 +325,6 @@ async function invokeRuntimeAgent(
     record.contextMode === "shared"
       ? buildSharedPrompt(executionOptions.messages ?? [], task)
       : task
-
   const result = await runtimeAgent.generate({
     prompt,
     abortSignal: executionOptions.abortSignal,

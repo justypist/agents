@@ -3,7 +3,7 @@ import { createRegistryEntryTool } from "@/tools/meta/create"
 import { deleteRegistryEntryTool } from "@/tools/meta/delete"
 import { invokeRegistryEntryTool } from "@/tools/meta/invoke"
 import { readRegistryEntryTool } from "@/tools/meta/read"
-import { InferAgentUIMessage, stepCountIs, ToolLoopAgent } from "ai"
+import { InferUITools, stepCountIs, ToolLoopAgent, UIMessage } from "ai"
 
 const instructions = `
 你是一个动态 agent/tool 编排器。
@@ -68,4 +68,8 @@ export const MainAgent = new ToolLoopAgent({
   },
 })
 
-export type MainAgentUIMessage = InferAgentUIMessage<typeof MainAgent>
+export type MainAgentUIMessage = UIMessage<
+  unknown,
+  Record<string, never>,
+  InferUITools<typeof MainAgent.tools>
+>

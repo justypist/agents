@@ -20,7 +20,7 @@ import {
   type KeyboardEvent,
 } from "react";
 
-import type { MainAgentUIMessage } from "@/agents/main";
+import { type MainAgentUIMessage } from "@/agents/main";
 
 type PendingAttachment = {
   id: string;
@@ -82,6 +82,205 @@ function formatValue(value: unknown) {
   } catch {
     return String(value);
   }
+}
+
+function getObjectRecord(value: unknown) {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return null;
+  }
+
+  return value as Record<string, unknown>;
+}
+
+function getStringField(value: unknown, key: string) {
+  const record = getObjectRecord(value);
+  const fieldValue = record?.[key];
+
+  return typeof fieldValue === "string" ? fieldValue : undefined;
+}
+
+function getNumberField(value: unknown, key: string) {
+  const record = getObjectRecord(value);
+  const fieldValue = record?.[key];
+
+  return typeof fieldValue === "number" ? fieldValue : undefined;
+}
+
+function getToolPartInput(part: StaticToolPart | DynamicToolUIPart) {
+  if ("input" in part && part.input !== undefined) {
+    return part.input;
+  }
+
+  if ("rawInput" in part) {
+    return part.rawInput;
+  }
+
+  return undefined;
+}
+
+function getEntityLabel(entityType: string | undefined, id: string | undefined) {
+  if (!entityType) {
+    return id ? `定义：${id}` : "定义";
+  }
+
+  return id ? `${entityType}：${id}` : `${entityType}定义`;
+}
+
+function getDisplayId(id: string | undefined) {
+  if (!id || id === "_" || id === "*" || id === "." || id === "/") {
+    return undefined;
+  }
+
+  return id;
+}
+
+function getCreateRegistryEntryHint(part: StaticToolPart) {
+  const input = getObjectRecord(getToolPartInput(part));
+  const output = part.state === "output-available" ? getObjectRecord(part.output) : null;
+  const inputValue = getObjectRecord(input?.value);
+  const outputRecord = getObjectRecord(output?.record);
+  const entityType =
+    getStringField(input, "entityType") ?? getStringField(outputRecord, "entityType");
+  const id = getStringField(inputValue, "id") ?? getStringField(outputRecord, "id");
+  const label = getEntityLabel(entityType, id);
+
+  switch (part.state) {
+    case "input-streaming":
+    case "input-available":
+      return `正在创建${label}`;
+    case "output-available":
+      return `已创建${label}`;
+    case "output-error":
+      return `创建${label}失败`;
+    default:
+      return null;
+  }
+}
+
+function getReadRegistryEntryHint(part: StaticToolPart) {
+  const input = getObjectRecord(getToolPartInput(part));
+  const output = part.state === "output-available" ? getObjectRecord(part.output) : null;
+  const mode = getStringField(output, "mode");
+  const record = getObjectRecord(output?.record);
+  const entityType =
+    getStringField(record, "entityType") ??
+    getStringField(output, "entityType") ??
+    getStringField(input, "entityType");
+  const id =
+    getDisplayId(getStringField(record, "id")) ??
+    getDisplayId(getStringField(input, "id"));
+  const count = getNumberField(output, "count");
+
+  switch (part.state) {
+    case "input-streaming":
+    case "input-available":
+      return id
+        ? `正在读取${getEntityLabel(entityType, id)}`
+        : `正在检查可复用的${getEntityLabel(entityType, undefined)}`;
+    case "output-available":
+      if (mode === "get" && id) {
+        return `已读取${getEntityLabel(entityType, id)}`;
+      }
+
+      if (mode === "list" && typeof count === "number") {
+        return `已检查${getEntityLabel(entityType, undefined)}，找到 ${count} 条`;
+      }
+
+      return `已检查${getEntityLabel(entityType, undefined)}`;
+    case "output-error":
+      return `读取${getEntityLabel(entityType, id)}失败`;
+    default:
+      return null;
+  }
+}
+
+function getDeleteRegistryEntryHint(part: StaticToolPart) {
+  const input = getObjectRecord(getToolPartInput(part));
+  const output = part.state === "output-available" ? getObjectRecord(part.output) : null;
+  const entityType =
+    getStringField(input, "entityType") ?? getStringField(output, "entityType");
+  const id = getStringField(input, "id") ?? getStringField(output, "id");
+  const label = getEntityLabel(entityType, id);
+
+  switch (part.state) {
+    case "input-streaming":
+    case "input-available":
+      return `正在删除${label}`;
+    case "output-available":
+      return `已删除${label}`;
+    case "output-error":
+      return `删除${label}失败`;
+    default:
+      return null;
+  }
+}
+
+function getInvokeRegistryEntryHint(part: StaticToolPart) {
+  const input = getObjectRecord(getToolPartInput(part));
+  const output = part.state === "output-available" ? getObjectRecord(part.output) : null;
+  const entityType =
+    getStringField(input, "entityType") ?? getStringField(output, "entityType");
+  const id =
+    getDisplayId(getStringField(input, "id")) ??
+    getDisplayId(getStringField(output, "id"));
+  const label = getEntityLabel(entityType, id);
+
+  switch (part.state) {
+    case "input-streaming":
+    case "input-available":
+      return `正在调用${label}`;
+    case "output-available":
+      return `${label} 已执行完成`;
+    case "output-error":
+      return `调用${label}失败`;
+    default:
+      return null;
+  }
+}
+
+function getStaticToolHint(part: StaticToolPart) {
+  const toolName = part.type.replace(/^tool-/, "");
+
+  switch (toolName) {
+    case "createRegistryEntry":
+      return getCreateRegistryEntryHint(part);
+    case "readRegistryEntry":
+      return getReadRegistryEntryHint(part);
+    case "deleteRegistryEntry":
+      return getDeleteRegistryEntryHint(part);
+    case "invokeRegistryEntry":
+      return getInvokeRegistryEntryHint(part);
+    default:
+      switch (part.state) {
+        case "input-streaming":
+        case "input-available":
+          return `正在执行 tool：${toolName}`;
+        case "output-available":
+          return `tool：${toolName} 已执行完成`;
+        case "output-error":
+          return `tool：${toolName} 执行失败`;
+        default:
+          return null;
+      }
+  }
+}
+
+function getToolHint(part: StaticToolPart | DynamicToolUIPart) {
+  if (part.type === "dynamic-tool") {
+    switch (part.state) {
+      case "input-streaming":
+      case "input-available":
+        return `正在调用 tool：${part.toolName}`;
+      case "output-available":
+        return `tool：${part.toolName} 已执行完成`;
+      case "output-error":
+        return `tool：${part.toolName} 执行失败`;
+      default:
+        return null;
+    }
+  }
+
+  return getStaticToolHint(part);
 }
 
 function scrollWindowToBottom(
@@ -303,41 +502,49 @@ function MessageView({ message }: { message: MainAgentUIMessage }) {
 
       {toolParts.map((part, index) => {
         const toolName =
-          part.type === "dynamic-tool" ? part.toolName : part.type;
+          part.type === "dynamic-tool"
+            ? part.toolName
+            : part.type.replace(/^tool-/, "");
+        const toolHint = getToolHint(part);
 
         return (
-          <details
-            className="mt-2 border border-border px-3 py-2"
-            key={`${message.id}-tool-${index}`}
-          >
-            <summary className="cursor-pointer text-xs text-muted-foreground">
-              tool: {toolName} ({part.state})
-            </summary>
+          <div className="mt-2" key={`${message.id}-tool-${index}`}>
+            <details className="border border-border px-3 py-2">
+              <summary className="cursor-pointer text-xs text-muted-foreground">
+                tool: {toolName} ({part.state})
+              </summary>
 
-            {"input" in part ? (
-              <div className="mt-2">
-                <div className="mb-1 text-xs text-muted-foreground">input</div>
-                <pre className="whitespace-pre-wrap wrap-break-word font-mono text-xs">
-                  {formatValue(part.input)}
+              {"input" in part ? (
+                <div className="mt-2">
+                  <div className="mb-1 text-xs text-muted-foreground">input</div>
+                  <pre className="whitespace-pre-wrap wrap-break-word font-mono text-xs">
+                    {formatValue(part.input)}
+                  </pre>
+                </div>
+              ) : null}
+
+              {part.state === "output-available" ? (
+                <div className="mt-2">
+                  <div className="mb-1 text-xs text-muted-foreground">output</div>
+                  <pre className="whitespace-pre-wrap wrap-break-word font-mono text-xs">
+                    {formatValue(part.output)}
+                  </pre>
+                </div>
+              ) : null}
+
+              {"errorText" in part && part.errorText ? (
+                <pre className="mt-2 whitespace-pre-wrap wrap-break-word font-mono text-xs text-destructive">
+                  {part.errorText}
                 </pre>
+              ) : null}
+            </details>
+
+            {toolHint ? (
+              <div className="px-1 pt-1 text-sm text-muted-foreground">
+                {toolHint}
               </div>
             ) : null}
-
-            {part.state === "output-available" ? (
-              <div className="mt-2">
-                <div className="mb-1 text-xs text-muted-foreground">output</div>
-                <pre className="whitespace-pre-wrap wrap-break-word font-mono text-xs">
-                  {formatValue(part.output)}
-                </pre>
-              </div>
-            ) : null}
-
-            {"errorText" in part && part.errorText ? (
-              <pre className="mt-2 whitespace-pre-wrap wrap-break-word font-mono text-xs text-destructive">
-                {part.errorText}
-              </pre>
-            ) : null}
-          </details>
+          </div>
         );
       })}
 
@@ -707,7 +914,6 @@ export function ChatPanel() {
           状态：{statusText}
         </div>
       </header>
-
       <div className="p-3">
         <div className="flex flex-col gap-3">
           {messages.length === 0 ? (
