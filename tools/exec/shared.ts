@@ -1,5 +1,4 @@
 import { spawn } from "node:child_process"
-import { z } from "zod"
 
 const DEFAULT_TIMEOUT_MS = 30_000
 const MAX_TIMEOUT_MS = 120_000
@@ -14,17 +13,20 @@ type CommandOutcome =
 export type CommandExecutionResult = {
   stdout: string
   stderr: string
+  ok: boolean
+  exitCode: number | null
+  timedOut: boolean
+  outcome: CommandOutcome
+}
+
+type RawCommandExecutionResult = {
+  stdout: string
+  stderr: string
   outcome: CommandOutcome
 }
 
 export type CommandInput = {
   command: string
-  timeoutMs?: number
-  maxOutputLength?: number
-}
-
-export type CodeInput = {
-  code: string
   timeoutMs?: number
   maxOutputLength?: number
 }
@@ -115,16 +117,22 @@ async function executeProcess(
       }
     }
 
-    const resolveOnce = (result: CommandExecutionResult) => {
+    const resolveOnce = (result: RawCommandExecutionResult) => {
       if (didSettle) {
         return
       }
 
       didSettle = true
       cleanup()
+      const timedOut = result.outcome.type === "timeout"
+      const exitCode =
+        result.outcome.type === "exit" ? result.outcome.exitCode : null
       resolve({
         stdout: truncateOutput(result.stdout, maxOutputLength),
         stderr: truncateOutput(result.stderr, maxOutputLength),
+        ok: !timedOut && exitCode === 0,
+        exitCode,
+        timedOut,
         outcome: result.outcome,
       })
     }
@@ -220,55 +228,3 @@ export async function executeBashCommand(
     abortSignal
   )
 }
-
-export async function executeJavaScript(
-  input: CodeInput,
-  abortSignal?: AbortSignal
-) {
-  return await executeProcess(
-    "node",
-    ["-e", input.code],
-    clampTimeoutMs(input.timeoutMs),
-    clampMaxOutputLength(input.maxOutputLength),
-    abortSignal
-  )
-}
-
-export async function executePython(
-  input: CodeInput,
-  abortSignal?: AbortSignal
-) {
-  return await executeProcess(
-    "python3",
-    ["-c", input.code],
-    clampTimeoutMs(input.timeoutMs),
-    clampMaxOutputLength(input.maxOutputLength),
-    abortSignal
-  )
-}
-
-export const commandInputSchema = z.object({
-  command: z.string().describe("要执行的 bash 命令"),
-  timeoutMs: z.number().int().positive().max(MAX_TIMEOUT_MS).optional(),
-  maxOutputLength: z.number().int().positive().max(MAX_OUTPUT_LENGTH).optional(),
-})
-
-export const codeInputSchema = z.object({
-  code: z.string().describe("要执行的代码"),
-  timeoutMs: z.number().int().positive().max(MAX_TIMEOUT_MS).optional(),
-  maxOutputLength: z.number().int().positive().max(MAX_OUTPUT_LENGTH).optional(),
-})
-
-export const commandOutputSchema = z.object({
-  stdout: z.string(),
-  stderr: z.string(),
-  outcome: z.discriminatedUnion("type", [
-    z.object({
-      type: z.literal("timeout"),
-    }),
-    z.object({
-      type: z.literal("exit"),
-      exitCode: z.number(),
-    }),
-  ]),
-})

@@ -7,6 +7,7 @@ import {
   isTextUIPart,
   isToolUIPart,
   type FileUIPart,
+  type DynamicToolUIPart,
 } from "ai";
 import {
   useEffect,
@@ -44,9 +45,10 @@ const ABORTED_TOOL_ERROR_TEXT = "用户已停止本次执行";
 const BOTTOM_THRESHOLD = 24;
 
 type MainAgentMessagePart = MainAgentUIMessage["parts"][number];
-type SearchToolUIPart = Extract<MainAgentMessagePart, { type: "tool-search" }>;
-type ExecToolUIPart = Extract<MainAgentMessagePart, { type: "tool-exec" }>;
-type DynamicToolUIPart = Extract<MainAgentMessagePart, { type: "dynamic-tool" }>;
+type StaticToolPart = Exclude<
+  Extract<MainAgentMessagePart, { toolCallId: string }>,
+  { type: "dynamic-tool" }
+>;
 
 function getStatusText(status: "submitted" | "streaming" | "ready" | "error") {
   switch (status) {
@@ -158,63 +160,24 @@ function getErrorMessage(error: unknown) {
   return "请求失败";
 }
 
-function finalizeSearchToolPart(part: SearchToolUIPart): SearchToolUIPart {
+function finalizeStaticToolPart<T extends StaticToolPart>(part: T): T {
   if (part.state === "input-streaming") {
     return {
-      type: part.type,
-      toolCallId: part.toolCallId,
-      title: part.title,
-      providerExecuted: part.providerExecuted,
+      ...part,
       state: "output-error",
       input: undefined,
       rawInput: part.input,
       errorText: ABORTED_TOOL_ERROR_TEXT,
-      callProviderMetadata: part.callProviderMetadata,
-    };
+    } as T;
   }
 
   if (part.state === "input-available") {
     return {
-      type: part.type,
-      toolCallId: part.toolCallId,
-      title: part.title,
-      providerExecuted: part.providerExecuted,
+      ...part,
       state: "output-error",
       input: part.input,
       errorText: ABORTED_TOOL_ERROR_TEXT,
-      callProviderMetadata: part.callProviderMetadata,
-    };
-  }
-
-  return part;
-}
-
-function finalizeExecToolPart(part: ExecToolUIPart): ExecToolUIPart {
-  if (part.state === "input-streaming") {
-    return {
-      type: part.type,
-      toolCallId: part.toolCallId,
-      title: part.title,
-      providerExecuted: part.providerExecuted,
-      state: "output-error",
-      input: undefined,
-      rawInput: part.input,
-      errorText: ABORTED_TOOL_ERROR_TEXT,
-      callProviderMetadata: part.callProviderMetadata,
-    };
-  }
-
-  if (part.state === "input-available") {
-    return {
-      type: part.type,
-      toolCallId: part.toolCallId,
-      title: part.title,
-      providerExecuted: part.providerExecuted,
-      state: "output-error",
-      input: part.input,
-      errorText: ABORTED_TOOL_ERROR_TEXT,
-      callProviderMetadata: part.callProviderMetadata,
-    };
+    } as T;
   }
 
   return part;
@@ -259,19 +222,11 @@ function finalizePendingToolParts(messages: MainAgentUIMessage[]) {
 
       didChange = true;
 
-      if (part.type === "tool-search") {
-        return finalizeSearchToolPart(part);
-      }
-
-      if (part.type === "tool-exec") {
-        return finalizeExecToolPart(part);
-      }
-
       if (part.type === "dynamic-tool") {
         return finalizeDynamicToolPart(part);
       }
 
-      return part;
+      return finalizeStaticToolPart(part);
     });
 
     if (!didChange) {
