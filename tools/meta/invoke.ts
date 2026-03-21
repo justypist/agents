@@ -1,4 +1,7 @@
-import { invokeRegistryEntry } from "@/lib/registry-runtime"
+import {
+  invokeRegistryEntry,
+  streamRuntimeAgentInvocation,
+} from "@/lib/registry-runtime"
 import { tool } from "ai"
 import { z } from "zod"
 
@@ -56,13 +59,40 @@ export const invokeRegistryEntryTool = tool({
     "按 id 调用一个当前内存中已存在的 tool 或 agent 定义。调用 tool 时传 { entityType: 'tool', id, input }；调用 agent 时传 { entityType: 'agent', id, task }。调用 agent 时会自动按其 contextMode 决定共享还是隔离上下文。",
   inputSchema: invokeRegistryEntryInputSchema,
   outputSchema: invokeRegistryEntryOutputSchema,
-  execute: async (input, executionOptions) => {
+  execute: async function* (input, executionOptions) {
     const parsedInput = invokeRegistryEntryArgsSchema.parse(input)
 
-    return await invokeRegistryEntry({
-      ...parsedInput,
+    if (parsedInput.entityType === "tool") {
+      yield await invokeRegistryEntry({
+        ...parsedInput,
+        abortSignal: executionOptions.abortSignal,
+        messages: executionOptions.messages,
+      })
+      return
+    }
+
+    let didYield = false
+
+    for await (const outputText of streamRuntimeAgentInvocation({
+      agentId: parsedInput.id,
+      task: parsedInput.task,
       abortSignal: executionOptions.abortSignal,
       messages: executionOptions.messages,
-    })
+    })) {
+      didYield = true
+      yield {
+        entityType: "agent" as const,
+        id: parsedInput.id,
+        outputText,
+      }
+    }
+
+    if (!didYield) {
+      yield {
+        entityType: "agent" as const,
+        id: parsedInput.id,
+        outputText: "",
+      }
+    }
   },
 })

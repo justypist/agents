@@ -75,6 +75,23 @@ const toolRegistry = new Map<string, RegistryToolRecord>()
 const agentRegistry = new Map<string, RegistryAgentRecord>()
 const runtimeToolCache = new Map<string, RuntimeTool>()
 const runtimeAgentCache = new Map<string, RuntimeAgent>()
+const builtInRuntimeToolIds = new Set([
+  "createRegistryEntry",
+  "readRegistryEntry",
+  "deleteRegistryEntry",
+  "invokeRegistryEntry",
+])
+
+const runtimeAgentCapabilityInstructions = `
+你也是一个动态 agent/tool 编排器。
+除当前定义里显式挂载的 tool 和子 agent 外，你始终还可以使用 createRegistryEntry、readRegistryEntry、deleteRegistryEntry、invokeRegistryEntry 这四个 meta tools 来复用、创建、删除、调用定义。
+
+工作约束：
+1. 先检查是否已有可复用定义，再决定是否创建新定义。
+2. 没有合适定义时，只创建完成当前任务所需的最小定义。
+3. 如果当前任务适合拆成可复用流程、需要多步编排、或需要长期复用，优先创建 agent。
+4. 你创建出的新 agent 同样具备这套动态定义能力。
+`.trim()
 
 function normalizeSource(source: string) {
   const trimmed = source.trim()
@@ -171,6 +188,51 @@ function buildSharedPrompt(messages: ModelMessage[], task: string) {
   ].join("\n")
 }
 
+async function getRuntimeRegistryTools(): Promise<RuntimeToolMap> {
+  const [
+    { createRegistryEntryTool },
+    { readRegistryEntryTool },
+    { deleteRegistryEntryTool },
+    { invokeRegistryEntryTool },
+  ] = await Promise.all([
+    import("@/tools/meta/create"),
+    import("@/tools/meta/read"),
+    import("@/tools/meta/delete"),
+    import("@/tools/meta/invoke"),
+  ])
+
+  return {
+    createRegistryEntry: createRegistryEntryTool,
+    readRegistryEntry: readRegistryEntryTool,
+    deleteRegistryEntry: deleteRegistryEntryTool,
+    invokeRegistryEntry: invokeRegistryEntryTool,
+  }
+}
+
+async function* streamRuntimeAgentText(
+  runtimeAgent: RuntimeAgent,
+  prompt: string | ModelMessage[],
+  abortSignal?: AbortSignal
+) {
+  const result = await runtimeAgent.stream({
+    prompt,
+    abortSignal,
+  })
+
+  let text = ""
+  let didYield = false
+
+  for await (const delta of result.textStream) {
+    text += delta
+    didYield = true
+    yield text
+  }
+
+  if (!didYield) {
+    yield text
+  }
+}
+
 function createRuntimeHelpers(): RuntimeHelpers {
   const normalizeCommandInput = (input: CommandInput | string): CommandInput =>
     typeof input === "string" ? { command: input } : input
@@ -260,6 +322,7 @@ export async function getRuntimeAgent(agentId: string): Promise<RuntimeAgent> {
     return cachedAgent
   }
 
+  const runtimeRegistryTools = await getRuntimeRegistryTools()
   const record = getAgentRecordById(agentId)
   const toolEntries = await Promise.all(
     record.toolIds.map(async (toolId) => [toolId, await getRuntimeTool(toolId)] as const)
@@ -282,11 +345,14 @@ export async function getRuntimeAgent(agentId: string): Promise<RuntimeAgent> {
     })
   )
 
-  const tools = Object.fromEntries([...toolEntries, ...childAgentEntries]) as RuntimeToolMap
+  const tools = {
+    ...runtimeRegistryTools,
+    ...Object.fromEntries([...toolEntries, ...childAgentEntries]),
+  } satisfies RuntimeToolMap
   const runtimeAgent = new ToolLoopAgent({
     ...options,
     id: record.id,
-    instructions: record.instructions,
+    instructions: `${runtimeAgentCapabilityInstructions}\n\n${record.instructions}`,
     stopWhen: [stepCountIs(record.contextMode === "shared" ? 24 : 16)],
     tools,
   })
@@ -325,12 +391,39 @@ async function invokeRuntimeAgent(
     record.contextMode === "shared"
       ? buildSharedPrompt(executionOptions.messages ?? [], task)
       : task
-  const result = await runtimeAgent.generate({
-    prompt,
-    abortSignal: executionOptions.abortSignal,
-  })
+  let finalText = ""
 
-  return result.text
+  for await (const text of streamRuntimeAgentText(
+    runtimeAgent,
+    prompt,
+    executionOptions.abortSignal
+  )) {
+    finalText = text
+  }
+
+  return finalText
+}
+
+export async function* streamRuntimeAgentInvocation(options: {
+  agentId: string
+  task: string
+  abortSignal?: AbortSignal
+  messages?: ModelMessage[]
+}) {
+  const record = getAgentRecordById(options.agentId)
+  const runtimeAgent = await getRuntimeAgent(options.agentId)
+  const prompt =
+    record.contextMode === "shared"
+      ? buildSharedPrompt(options.messages ?? [], options.task)
+      : options.task
+
+  for await (const text of streamRuntimeAgentText(
+    runtimeAgent,
+    prompt,
+    options.abortSignal
+  )) {
+    yield text
+  }
 }
 
 export async function invokeRegistryEntry(options: {
@@ -374,6 +467,10 @@ export async function clearRuntimeRegistryCaches() {
 export async function createToolRecord(
   value: Omit<RegistryToolRecord, "entityType">
 ) {
+  if (builtInRuntimeToolIds.has(value.id)) {
+    throw new Error(`id 为系统保留名称: ${value.id}`)
+  }
+
   if (toolRegistry.has(value.id) || agentRegistry.has(value.id)) {
     throw new Error(`id 已存在: ${value.id}`)
   }
@@ -394,6 +491,10 @@ export async function createToolRecord(
 export async function createAgentRecord(
   value: Omit<RegistryAgentRecord, "entityType">
 ) {
+  if (builtInRuntimeToolIds.has(value.id)) {
+    throw new Error(`id 为系统保留名称: ${value.id}`)
+  }
+
   if (toolRegistry.has(value.id) || agentRegistry.has(value.id)) {
     throw new Error(`id 已存在: ${value.id}`)
   }

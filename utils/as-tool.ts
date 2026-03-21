@@ -16,13 +16,24 @@ export function asTool<INPUT, TOOLS extends ToolSet>(
     description: options.description,
     inputSchema: options.inputSchema,
     outputSchema: z.string(),
-    execute: async (input, { abortSignal }) => {
-      const result = await agent.generate({
+    execute: async function* (input, { abortSignal }) {
+      const result = await agent.stream({
         prompt: options.toPrompt(input),
         abortSignal,
       })
 
-      return result.text
+      let text = ""
+      let didYield = false
+
+      for await (const delta of result.textStream) {
+        text += delta
+        didYield = true
+        yield text
+      }
+
+      if (!didYield) {
+        yield text
+      }
     },
     toModelOutput: ({ output }) => ({
       type: "text" as const,

@@ -230,6 +230,9 @@ function getInvokeRegistryEntryHint(part: StaticToolPart) {
     case "input-available":
       return `正在调用${label}`;
     case "output-available":
+      if (part.preliminary) {
+        return `${label} 正在流式返回`;
+      }
       return `${label} 已执行完成`;
     case "output-error":
       return `调用${label}失败`;
@@ -256,6 +259,9 @@ function getStaticToolHint(part: StaticToolPart) {
         case "input-available":
           return `正在执行 tool：${toolName}`;
         case "output-available":
+          if (part.preliminary) {
+            return `tool：${toolName} 正在流式返回`;
+          }
           return `tool：${toolName} 已执行完成`;
         case "output-error":
           return `tool：${toolName} 执行失败`;
@@ -272,6 +278,9 @@ function getToolHint(part: StaticToolPart | DynamicToolUIPart) {
       case "input-available":
         return `正在调用 tool：${part.toolName}`;
       case "output-available":
+        if (part.preliminary) {
+          return `tool：${part.toolName} 正在流式返回`;
+        }
         return `tool：${part.toolName} 已执行完成`;
       case "output-error":
         return `tool：${part.toolName} 执行失败`;
