@@ -13,7 +13,7 @@ import {
   type ModelMessage,
   type ToolSet,
 } from "ai"
-import { desc, eq, ilike, or } from "drizzle-orm"
+import { desc, eq, inArray, ilike, or, sql } from "drizzle-orm"
 import { z } from "zod"
 
 import { options } from "./ai"
@@ -486,6 +486,76 @@ async function assertRegistryIdAvailable(id: string) {
   }
 }
 
+async function assertAgentReferencesExist(value: {
+  toolIds: string[]
+  agentIds: string[]
+}) {
+  const uniqueToolIds = [...new Set(value.toolIds)]
+  const uniqueAgentIds = [...new Set(value.agentIds)]
+  const reservedToolIds = uniqueToolIds.filter((toolId) =>
+    builtInRuntimeToolIds.has(toolId)
+  )
+
+  if (reservedToolIds.length > 0) {
+    throw new Error(
+      `agent 不需要显式声明系统内置 tool: ${reservedToolIds.join(", ")}`
+    )
+  }
+
+  const [toolRecords, agentRecords] = await Promise.all([
+    uniqueToolIds.length === 0
+      ? Promise.resolve([] as Array<{ id: string }>)
+      : db
+          .select({ id: toolsTable.id })
+          .from(toolsTable)
+          .where(inArray(toolsTable.id, uniqueToolIds)),
+    uniqueAgentIds.length === 0
+      ? Promise.resolve([] as Array<{ id: string }>)
+      : db
+          .select({ id: agentsTable.id })
+          .from(agentsTable)
+          .where(inArray(agentsTable.id, uniqueAgentIds)),
+  ])
+
+  const existingToolIds = new Set(toolRecords.map((record) => record.id))
+  const existingAgentIds = new Set(agentRecords.map((record) => record.id))
+  const missingToolIds = uniqueToolIds.filter((toolId) => !existingToolIds.has(toolId))
+  const missingAgentIds = uniqueAgentIds.filter(
+    (agentId) => !existingAgentIds.has(agentId)
+  )
+
+  if (missingToolIds.length > 0) {
+    throw new Error(`agent 引用了不存在的 tool: ${missingToolIds.join(", ")}`)
+  }
+
+  if (missingAgentIds.length > 0) {
+    throw new Error(`agent 引用了不存在的子 agent: ${missingAgentIds.join(", ")}`)
+  }
+}
+
+async function getReferencingAgentIds(entityType: RegistryEntityType, id: string) {
+  const column = entityType === "tool" ? agentsTable.toolIds : agentsTable.agentIds
+  const records = await db
+    .select({ id: agentsTable.id })
+    .from(agentsTable)
+    .where(sql`${id} = any(${column})`)
+
+  return records.map((record) => record.id)
+}
+
+async function assertRegistryRecordNotReferenced(
+  entityType: RegistryEntityType,
+  id: string
+) {
+  const referencingAgentIds = await getReferencingAgentIds(entityType, id)
+
+  if (referencingAgentIds.length > 0) {
+    throw new Error(
+      `${entityType} ${id} 仍被以下 agent 引用，不能删除: ${referencingAgentIds.join(", ")}`
+    )
+  }
+}
+
 export async function createToolRecord(
   value: Omit<RegistryToolRecord, "entityType">
 ) {
@@ -519,6 +589,10 @@ export async function createAgentRecord(
   }
 
   await assertRegistryIdAvailable(value.id)
+  await assertAgentReferencesExist({
+    toolIds: value.toolIds,
+    agentIds: value.agentIds,
+  })
 
   const [record] = await db
     .insert(agentsTable)
@@ -536,6 +610,8 @@ export async function createAgentRecord(
 }
 
 export async function deleteRegistryRecord(entityType: RegistryEntityType, id: string) {
+  await assertRegistryRecordNotReferenced(entityType, id)
+
   const deletedRecords =
     entityType === "tool"
       ? await db.delete(toolsTable).where(eq(toolsTable.id, id)).returning({ id: toolsTable.id })
