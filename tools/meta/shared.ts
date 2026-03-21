@@ -310,7 +310,7 @@ export async function readRegistryEntry(
 
   if (!shouldTreatAsListRequest && normalizedId) {
     try {
-      const record = getRegistryRecord(
+      const record = await getRegistryRecord(
         input.entityType as RegistryEntityType,
         normalizedId
       )
@@ -329,7 +329,7 @@ export async function readRegistryEntry(
     }
   }
 
-  const records = listRegistryRecords(input.entityType as RegistryEntityType, {
+  const records = await listRegistryRecords(input.entityType as RegistryEntityType, {
     query: resolveListQuery(normalizedId, normalizedQuery),
     limit: input.limit,
   })

@@ -1,5 +1,5 @@
 {
-  "id": "cdb78b15-1820-4da7-94f8-4f936f570644",
+  "id": "10a7b435-7736-4d0d-8bd4-db81f6de7557",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -14,12 +14,6 @@
           "primaryKey": true,
           "notNull": true
         },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
         "description": {
           "name": "description",
           "type": "text",
@@ -29,6 +23,13 @@
         "instructions": {
           "name": "instructions",
           "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "context_mode": {
+          "name": "context_mode",
+          "type": "agent_context_mode",
+          "typeSchema": "public",
           "primaryKey": false,
           "notNull": true
         },
@@ -60,11 +61,26 @@
         }
       },
       "indexes": {
-        "agents_name_idx": {
-          "name": "agents_name_idx",
+        "agents_description_idx": {
+          "name": "agents_description_idx",
           "columns": [
             {
-              "expression": "name",
+              "expression": "description",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "agents_context_mode_idx": {
+          "name": "agents_context_mode_idx",
+          "columns": [
+            {
+              "expression": "context_mode",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -93,19 +109,6 @@
           "primaryKey": true,
           "notNull": true
         },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "type": {
-          "name": "type",
-          "type": "tool_type",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
         "description": {
           "name": "description",
           "type": "text",
@@ -120,6 +123,12 @@
         },
         "output_schema": {
           "name": "output_schema",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source": {
+          "name": "source",
           "type": "text",
           "primaryKey": false,
           "notNull": true
@@ -140,26 +149,11 @@
         }
       },
       "indexes": {
-        "tools_name_idx": {
-          "name": "tools_name_idx",
+        "tools_description_idx": {
+          "name": "tools_description_idx",
           "columns": [
             {
-              "expression": "name",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "tools_type_idx": {
-          "name": "tools_type_idx",
-          "columns": [
-            {
-              "expression": "type",
+              "expression": "description",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -180,12 +174,12 @@
     }
   },
   "enums": {
-    "public.tool_type": {
-      "name": "tool_type",
+    "public.agent_context_mode": {
+      "name": "agent_context_mode",
       "schema": "public",
       "values": [
-        "internal",
-        "agent"
+        "shared",
+        "isolated"
       ]
     }
   },

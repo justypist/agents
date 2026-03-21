@@ -1,9 +1,9 @@
-CREATE TYPE "public"."tool_type" AS ENUM('internal', 'agent');--> statement-breakpoint
+CREATE TYPE "public"."agent_context_mode" AS ENUM('shared', 'isolated');--> statement-breakpoint
 CREATE TABLE "agents" (
 	"id" text PRIMARY KEY NOT NULL,
-	"name" text NOT NULL,
 	"description" text NOT NULL,
 	"instructions" text NOT NULL,
+	"context_mode" "agent_context_mode" NOT NULL,
 	"tool_ids" text[] NOT NULL,
 	"agent_ids" text[] NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
@@ -12,15 +12,14 @@ CREATE TABLE "agents" (
 --> statement-breakpoint
 CREATE TABLE "tools" (
 	"id" text PRIMARY KEY NOT NULL,
-	"name" text NOT NULL,
-	"type" "tool_type" NOT NULL,
 	"description" text NOT NULL,
 	"input_schema" text NOT NULL,
 	"output_schema" text NOT NULL,
+	"source" text NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE INDEX "agents_name_idx" ON "agents" USING btree ("name");--> statement-breakpoint
-CREATE INDEX "tools_name_idx" ON "tools" USING btree ("name");--> statement-breakpoint
-CREATE INDEX "tools_type_idx" ON "tools" USING btree ("type");
+CREATE INDEX "agents_description_idx" ON "agents" USING btree ("description");--> statement-breakpoint
+CREATE INDEX "agents_context_mode_idx" ON "agents" USING btree ("context_mode");--> statement-breakpoint
+CREATE INDEX "tools_description_idx" ON "tools" USING btree ("description");

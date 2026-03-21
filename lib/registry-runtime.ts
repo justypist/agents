@@ -3,6 +3,8 @@ import {
   type CommandInput,
 } from "@/tools/exec/shared"
 import { asTool } from "@/utils/as-tool"
+import { db } from "@/db"
+import { agentsTable, toolsTable, type Agent, type Tool } from "@/db/schema"
 import {
   jsonSchema,
   stepCountIs,
@@ -11,6 +13,7 @@ import {
   type ModelMessage,
   type ToolSet,
 } from "ai"
+import { desc, eq, ilike, or } from "drizzle-orm"
 import { z } from "zod"
 
 import { options } from "./ai"
@@ -71,10 +74,6 @@ type ToolSourceContext = {
   helpers: RuntimeHelpers
 }
 
-const toolRegistry = new Map<string, RegistryToolRecord>()
-const agentRegistry = new Map<string, RegistryAgentRecord>()
-const runtimeToolCache = new Map<string, RuntimeTool>()
-const runtimeAgentCache = new Map<string, RuntimeAgent>()
 const builtInRuntimeToolIds = new Set([
   "createRegistryEntry",
   "readRegistryEntry",
@@ -87,10 +86,11 @@ const runtimeAgentCapabilityInstructions = `
 除当前定义里显式挂载的 tool 和子 agent 外，你始终还可以使用 createRegistryEntry、readRegistryEntry、deleteRegistryEntry、invokeRegistryEntry 这四个 meta tools 来复用、创建、删除、调用定义。
 
 工作约束：
-1. 先检查是否已有可复用定义，再决定是否创建新定义。
-2. 没有合适定义时，只创建完成当前任务所需的最小定义。
-3. 如果当前任务适合拆成可复用流程、需要多步编排、或需要长期复用，优先创建 agent。
-4. 你创建出的新 agent 同样具备这套动态定义能力。
+1. 所有业务定义都持久化在 PostgreSQL 中；查询当前可用定义时，以数据库查询结果为准。
+2. 先检查是否已有可复用定义，再决定是否创建新定义。
+3. 没有合适定义时，只创建完成当前任务所需的最小定义。
+4. 如果当前任务适合拆成可复用流程、需要多步编排、或需要长期复用，优先创建 agent。
+5. 你创建出的新 agent 同样具备这套动态定义能力。
 `.trim()
 
 function normalizeSource(source: string) {
@@ -245,24 +245,55 @@ function createRuntimeHelpers(): RuntimeHelpers {
   }
 }
 
-function getToolRecordById(id: string) {
-  const record = toolRegistry.get(id)
+function mapToolRowToRecord(row: Tool): RegistryToolRecord {
+  return {
+    entityType: "tool",
+    id: row.id,
+    description: row.description,
+    inputSchema: row.inputSchema,
+    outputSchema: row.outputSchema,
+    source: row.source,
+  }
+}
+
+function mapAgentRowToRecord(row: Agent): RegistryAgentRecord {
+  return {
+    entityType: "agent",
+    id: row.id,
+    description: row.description,
+    instructions: row.instructions,
+    contextMode: row.contextMode,
+    toolIds: row.toolIds,
+    agentIds: row.agentIds,
+  }
+}
+
+async function getToolRecordById(id: string) {
+  const [record] = await db
+    .select()
+    .from(toolsTable)
+    .where(eq(toolsTable.id, id))
+    .limit(1)
 
   if (!record) {
     throw new Error(`未找到 tool: ${id}`)
   }
 
-  return record
+  return mapToolRowToRecord(record)
 }
 
-function getAgentRecordById(id: string) {
-  const record = agentRegistry.get(id)
+async function getAgentRecordById(id: string) {
+  const [record] = await db
+    .select()
+    .from(agentsTable)
+    .where(eq(agentsTable.id, id))
+    .limit(1)
 
   if (!record) {
     throw new Error(`未找到 agent: ${id}`)
   }
 
-  return record
+  return mapAgentRowToRecord(record)
 }
 
 function createRuntimeTool(record: RegistryToolRecord) {
@@ -303,33 +334,18 @@ export function validateRegistryToolDefinition(
 }
 
 export async function getRuntimeTool(toolId: string): Promise<RuntimeTool> {
-  const cachedTool = runtimeToolCache.get(toolId)
-
-  if (cachedTool) {
-    return cachedTool
-  }
-
-  const runtimeTool = createRuntimeTool(getToolRecordById(toolId))
-  runtimeToolCache.set(toolId, runtimeTool)
-
-  return runtimeTool
+  return createRuntimeTool(await getToolRecordById(toolId))
 }
 
 export async function getRuntimeAgent(agentId: string): Promise<RuntimeAgent> {
-  const cachedAgent = runtimeAgentCache.get(agentId)
-
-  if (cachedAgent) {
-    return cachedAgent
-  }
-
   const runtimeRegistryTools = await getRuntimeRegistryTools()
-  const record = getAgentRecordById(agentId)
+  const record = await getAgentRecordById(agentId)
   const toolEntries = await Promise.all(
     record.toolIds.map(async (toolId) => [toolId, await getRuntimeTool(toolId)] as const)
   )
   const childAgentEntries = await Promise.all(
     record.agentIds.map(async (childAgentId) => {
-      const childRecord = getAgentRecordById(childAgentId)
+      const childRecord = await getAgentRecordById(childAgentId)
       const childAgent = await getRuntimeAgent(childAgentId)
 
       return [
@@ -357,8 +373,6 @@ export async function getRuntimeAgent(agentId: string): Promise<RuntimeAgent> {
     tools,
   })
 
-  runtimeAgentCache.set(agentId, runtimeAgent)
-
   return runtimeAgent
 }
 
@@ -374,7 +388,7 @@ async function invokeRuntimeTool(
   }
 
   return await runtimeTool.execute(input, {
-    toolCallId: `memory-tool-${toolId}`,
+    toolCallId: `registry-tool-${toolId}`,
     abortSignal: executionOptions.abortSignal,
     messages: executionOptions.messages ?? [],
   })
@@ -385,7 +399,7 @@ async function invokeRuntimeAgent(
   task: string,
   executionOptions: RuntimeExecutionOptions = {}
 ) {
-  const record = getAgentRecordById(agentId)
+  const record = await getAgentRecordById(agentId)
   const runtimeAgent = await getRuntimeAgent(agentId)
   const prompt =
     record.contextMode === "shared"
@@ -410,7 +424,7 @@ export async function* streamRuntimeAgentInvocation(options: {
   abortSignal?: AbortSignal
   messages?: ModelMessage[]
 }) {
-  const record = getAgentRecordById(options.agentId)
+  const record = await getAgentRecordById(options.agentId)
   const runtimeAgent = await getRuntimeAgent(options.agentId)
   const prompt =
     record.contextMode === "shared"
@@ -456,11 +470,19 @@ export async function invokeRegistryEntry(options: {
 }
 
 export async function clearRuntimeRegistryCaches() {
-  runtimeToolCache.clear()
-  runtimeAgentCache.clear()
-
   return {
     cleared: true as const,
+  }
+}
+
+async function assertRegistryIdAvailable(id: string) {
+  const [toolRecord, agentRecord] = await Promise.all([
+    db.select({ id: toolsTable.id }).from(toolsTable).where(eq(toolsTable.id, id)).limit(1),
+    db.select({ id: agentsTable.id }).from(agentsTable).where(eq(agentsTable.id, id)).limit(1),
+  ])
+
+  if (toolRecord[0] || agentRecord[0]) {
+    throw new Error(`id 已存在: ${id}`)
   }
 }
 
@@ -471,21 +493,22 @@ export async function createToolRecord(
     throw new Error(`id 为系统保留名称: ${value.id}`)
   }
 
-  if (toolRegistry.has(value.id) || agentRegistry.has(value.id)) {
-    throw new Error(`id 已存在: ${value.id}`)
-  }
+  await assertRegistryIdAvailable(value.id)
 
   validateRegistryToolDefinition(value)
 
-  const record: RegistryToolRecord = {
-    entityType: "tool",
-    ...value,
-  }
+  const [record] = await db
+    .insert(toolsTable)
+    .values({
+      id: value.id,
+      description: value.description,
+      inputSchema: value.inputSchema,
+      outputSchema: value.outputSchema,
+      source: value.source,
+    })
+    .returning()
 
-  toolRegistry.set(record.id, record)
-  await clearRuntimeRegistryCaches()
-
-  return record
+  return mapToolRowToRecord(record)
 }
 
 export async function createAgentRecord(
@@ -495,30 +518,35 @@ export async function createAgentRecord(
     throw new Error(`id 为系统保留名称: ${value.id}`)
   }
 
-  if (toolRegistry.has(value.id) || agentRegistry.has(value.id)) {
-    throw new Error(`id 已存在: ${value.id}`)
-  }
+  await assertRegistryIdAvailable(value.id)
 
-  const record: RegistryAgentRecord = {
-    entityType: "agent",
-    ...value,
-  }
+  const [record] = await db
+    .insert(agentsTable)
+    .values({
+      id: value.id,
+      description: value.description,
+      instructions: value.instructions,
+      contextMode: value.contextMode,
+      toolIds: value.toolIds,
+      agentIds: value.agentIds,
+    })
+    .returning()
 
-  agentRegistry.set(record.id, record)
-  await clearRuntimeRegistryCaches()
-
-  return record
+  return mapAgentRowToRecord(record)
 }
 
 export async function deleteRegistryRecord(entityType: RegistryEntityType, id: string) {
-  const deleted =
-    entityType === "tool" ? toolRegistry.delete(id) : agentRegistry.delete(id)
+  const deletedRecords =
+    entityType === "tool"
+      ? await db.delete(toolsTable).where(eq(toolsTable.id, id)).returning({ id: toolsTable.id })
+      : await db
+          .delete(agentsTable)
+          .where(eq(agentsTable.id, id))
+          .returning({ id: agentsTable.id })
 
-  if (!deleted) {
+  if (deletedRecords.length === 0) {
     throw new Error(`未找到 ${entityType}: ${id}`)
   }
-
-  await clearRuntimeRegistryCaches()
 
   return {
     action: "delete" as const,
@@ -528,30 +556,48 @@ export async function deleteRegistryRecord(entityType: RegistryEntityType, id: s
   }
 }
 
-export function getRegistryRecord(entityType: RegistryEntityType, id: string) {
-  return entityType === "tool" ? getToolRecordById(id) : getAgentRecordById(id)
+export async function getRegistryRecord(entityType: RegistryEntityType, id: string) {
+  return entityType === "tool" ? await getToolRecordById(id) : await getAgentRecordById(id)
 }
 
-export function listRegistryRecords(
+export async function listRegistryRecords(
   entityType: RegistryEntityType,
   options: { query?: string; limit?: number } = {}
 ) {
-  const records =
-    entityType === "tool"
-      ? [...toolRegistry.values()].reverse()
-      : [...agentRegistry.values()].reverse()
+  const limit = options.limit ?? 50
+  const query = options.query ? `%${options.query}%` : undefined
 
-  const filteredRecords = records.filter((record) => {
-    if (!options.query) {
-      return true
-    }
+  if (entityType === "tool") {
+    const records = await db
+      .select()
+      .from(toolsTable)
+      .where(
+        query
+          ? or(
+              ilike(toolsTable.id, query),
+              ilike(toolsTable.description, query)
+            )
+          : undefined
+      )
+      .orderBy(desc(toolsTable.createdAt))
+      .limit(limit)
 
-    const query = options.query.toLowerCase()
-    return (
-      record.id.toLowerCase().includes(query) ||
-      record.description.toLowerCase().includes(query)
+    return records.map(mapToolRowToRecord)
+  }
+
+  const records = await db
+    .select()
+    .from(agentsTable)
+    .where(
+      query
+        ? or(
+            ilike(agentsTable.id, query),
+            ilike(agentsTable.description, query)
+          )
+        : undefined
     )
-  })
+    .orderBy(desc(agentsTable.createdAt))
+    .limit(limit)
 
-  return filteredRecords.slice(0, options.limit ?? 50)
+  return records.map(mapAgentRowToRecord)
 }
