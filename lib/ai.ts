@@ -1,4 +1,4 @@
-import { createOpenAI } from '@ai-sdk/openai';
+import { createOpenAI, OpenAILanguageModelResponsesOptions } from '@ai-sdk/openai';
 
 import { config } from '@/config';
 
@@ -8,3 +8,13 @@ export const openai = createOpenAI({
 });
 
 export const model = openai.responses(config.ai.model);
+
+export const options = {
+  model,
+  providerOptions: {
+    openai: {
+      store: false,
+      reasoningEffort: 'low',
+    } satisfies OpenAILanguageModelResponsesOptions,
+  },
+}
