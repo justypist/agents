@@ -19,6 +19,7 @@
 
 # workflow
 /public/.well-known/workflow/
+/app/.well-known/workflow/
 
 # production
 /build
