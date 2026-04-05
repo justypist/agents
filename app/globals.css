@@ -45,6 +45,33 @@ body {
 
 html {
   background: var(--background);
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+html:hover {
+  scrollbar-width: auto;
+}
+
+html::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+html:hover::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+html::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+html::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 body {
