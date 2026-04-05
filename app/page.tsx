@@ -80,26 +80,26 @@ export default function Home() {
   }, [status]);
 
   return (
-    <main className="flex h-screen flex-col bg-white text-black">
-      <div className="border-b border-black px-4 py-3 text-sm">
-        <div className="flex items-center justify-between gap-4">
-          <h1 className="font-medium">聊天</h1>
-          <span>{getStatusLabel(status)}</span>
+    <main className="flex min-h-screen flex-col bg-background text-foreground">
+      <div className="border-b border-border px-4 py-3">
+        <div className="mx-auto flex w-full max-w-4xl items-center justify-between gap-4">
+          <h1 className="text-sm font-medium tracking-[-0.01em]">聊天</h1>
+          <span className="text-sm text-muted-foreground">{getStatusLabel(status)}</span>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-4">
+      <div className="flex-1 overflow-y-auto px-4 py-6 sm:px-6">
         <div className="mx-auto flex w-full max-w-4xl flex-col gap-4">
           {messages.length === 0 ? (
-            <p className="text-sm text-neutral-500">还没有消息</p>
+            <p className="text-sm text-muted-foreground">还没有消息</p>
           ) : (
             <>
               {messages.map(message => (
-                <article key={message.id} className="border-b border-black pb-4">
-                  <p className="mb-2 text-xs uppercase">
+                <article key={message.id} className="border-b border-border pb-4">
+                  <p className="mb-3 text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
                     {message.role === 'user' ? 'User' : 'Agent'}
                   </p>
-                  <div className="space-y-2 whitespace-pre-wrap break-words text-sm leading-6">
+                  <div className="space-y-2 whitespace-pre-wrap break-words text-sm leading-7 tracking-[-0.01em]">
                     {message.parts.map((part, index) => {
                       if (part.type === 'reasoning') {
                         const reasoningText = getReasoningText(part.text);
@@ -112,9 +112,9 @@ export default function Home() {
                         return (
                           <section
                             key={`${message.id}-${index}`}
-                            className="rounded-sm border border-neutral-200 bg-neutral-50/60 px-3 py-2 text-neutral-500"
+                            className="border border-border px-3 py-2 text-muted-foreground"
                           >
-                            <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-neutral-400">
+                            <p className="mb-1 text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
                               {getReasoningLabel(part.state)}
                             </p>
                             <p>{isEmptyReasoning ? '思考中...' : reasoningText}</p>
@@ -124,7 +124,7 @@ export default function Home() {
 
                       if (part.type === 'text') {
                         return (
-                          <p key={`${message.id}-${index}`} className="text-black">
+                          <p key={`${message.id}-${index}`} className="text-foreground">
                             {part.text}
                           </p>
                         );
@@ -136,9 +136,11 @@ export default function Home() {
                 </article>
               ))}
               {shouldShowPendingReply ? (
-                <article className="border-b border-black pb-4">
-                  <p className="mb-2 text-xs uppercase">Agent</p>
-                  <div className="space-y-2 whitespace-pre-wrap break-words text-sm leading-6 text-neutral-500">
+                <article className="border-b border-border pb-4">
+                  <p className="mb-3 text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                    Agent
+                  </p>
+                  <div className="space-y-2 whitespace-pre-wrap break-words text-sm leading-7 text-muted-foreground">
                     <p>{getPendingReplyLabel(status)}</p>
                   </div>
                 </article>
@@ -149,14 +151,14 @@ export default function Home() {
         </div>
       </div>
 
-      <div className="border-t border-black px-4 py-4">
+      <div className="border-t border-border px-4 py-4 sm:px-6">
         <div className="mx-auto w-full max-w-4xl">
           {error ? (
-            <p className="mb-3 text-sm">出现错误，请稍后重试。</p>
+            <p className="mb-3 text-sm text-muted-foreground">出现错误，请稍后重试。</p>
           ) : null}
 
           <form
-            className="flex items-end gap-3"
+            className="flex flex-col gap-3 sm:flex-row sm:items-end"
             onSubmit={event => {
               event.preventDefault();
               submitMessage();
@@ -166,7 +168,7 @@ export default function Home() {
               <span className="sr-only">输入消息</span>
               <textarea
                 ref={inputRef}
-                className="min-h-24 w-full resize-none border border-black bg-white px-3 py-2 text-sm leading-6 outline-none"
+                className="min-h-24 w-full resize-none border border-border bg-background px-3 py-2 text-sm leading-6 text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-border-strong"
                 value={input}
                 onChange={event => setInput(event.target.value)}
                 onKeyDown={event => {
@@ -184,7 +186,7 @@ export default function Home() {
               <button
                 type="button"
                 onClick={() => stop()}
-                className="h-10 border border-black px-4 text-sm"
+                className="h-10 border border-border px-4 text-sm text-foreground"
               >
                 停止
               </button>
@@ -192,7 +194,7 @@ export default function Home() {
             <button
               type="submit"
               disabled={isLoading || input.trim().length === 0}
-              className="h-10 border border-black px-4 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+              className="h-10 border border-border bg-background px-4 text-sm text-foreground disabled:cursor-not-allowed disabled:opacity-40"
             >
               发送
             </button>
