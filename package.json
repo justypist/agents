@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.50",
+    "@ai-sdk/react": "^3.0.148",
     "@next/env": "^16.2.2",
     "ai": "^6.0.146",
     "next": "16.2.2",
