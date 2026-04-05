@@ -17,6 +17,18 @@ function getStatusLabel(status: string): string {
   }
 }
 
+function getReasoningLabel(state?: 'streaming' | 'done'): string {
+  return state === 'streaming' ? '思考中' : '思考过程';
+}
+
+function getReasoningText(text: string): string {
+  return text.trim();
+}
+
+function getPendingReplyLabel(status: string): string {
+  return status === 'submitted' ? '已收到，正在思考...' : '正在生成回复...';
+}
+
 export default function Home() {
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
@@ -29,6 +41,12 @@ export default function Home() {
   const previousStatusRef = useRef(status);
 
   const isLoading = status === 'submitted' || status === 'streaming';
+  const lastMessage = messages[messages.length - 1];
+  const shouldShowPendingReply =
+    isLoading &&
+    (lastMessage == null ||
+      lastMessage.role !== 'assistant' ||
+      lastMessage.parts.length === 0);
 
   const submitMessage = (): void => {
     const trimmedInput = input.trim();
@@ -82,14 +100,49 @@ export default function Home() {
                     {message.role === 'user' ? 'User' : 'Agent'}
                   </p>
                   <div className="space-y-2 whitespace-pre-wrap break-words text-sm leading-6">
-                    {message.parts.map((part, index) =>
-                      part.type === 'text' ? (
-                        <p key={`${message.id}-${index}`}>{part.text}</p>
-                      ) : null,
-                    )}
+                    {message.parts.map((part, index) => {
+                      if (part.type === 'reasoning') {
+                        const reasoningText = getReasoningText(part.text);
+                        const isEmptyReasoning = reasoningText.length === 0;
+
+                        if (isEmptyReasoning && part.state !== 'streaming') {
+                          return null;
+                        }
+
+                        return (
+                          <section
+                            key={`${message.id}-${index}`}
+                            className="rounded-sm border border-neutral-200 bg-neutral-50/60 px-3 py-2 text-neutral-500"
+                          >
+                            <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-neutral-400">
+                              {getReasoningLabel(part.state)}
+                            </p>
+                            <p>{isEmptyReasoning ? '思考中...' : reasoningText}</p>
+                          </section>
+                        );
+                      }
+
+                      if (part.type === 'text') {
+                        return (
+                          <p key={`${message.id}-${index}`} className="text-black">
+                            {part.text}
+                          </p>
+                        );
+                      }
+
+                      return null;
+                    })}
                   </div>
                 </article>
               ))}
+              {shouldShowPendingReply ? (
+                <article className="border-b border-black pb-4">
+                  <p className="mb-2 text-xs uppercase">Agent</p>
+                  <div className="space-y-2 whitespace-pre-wrap break-words text-sm leading-6 text-neutral-500">
+                    <p>{getPendingReplyLabel(status)}</p>
+                  </div>
+                </article>
+              ) : null}
               <div ref={messagesEndRef} />
             </>
           )}

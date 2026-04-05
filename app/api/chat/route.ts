@@ -14,5 +14,7 @@ export async function POST(request: Request): Promise<Response> {
     abortSignal: request.signal,
   });
 
-  return result.toUIMessageStreamResponse();
+  return result.toUIMessageStreamResponse({
+    sendReasoning: true,
+  });
 }
