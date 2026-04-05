@@ -17,6 +17,9 @@
 /.next/
 /out/
 
+# workflow
+/public/.well-known/workflow/
+
 # production
 /build
 
@@ -36,6 +39,9 @@ yarn-error.log*
 
 # vercel
 .vercel
+
+# dev
+/.swc/
 
 # typescript
 *.tsbuildinfo
