@@ -14,7 +14,7 @@ export const options = {
   providerOptions: {
     openai: {
       store: false,
-      reasoningEffort: 'low',
+      reasoningEffort: 'medium',
     } satisfies OpenAILanguageModelResponsesOptions,
   },
 }
