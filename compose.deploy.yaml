@@ -1,0 +1,10 @@
+services:
+  aagentsp:
+    image: agents:latest
+    container_name: agents
+    restart: unless-stopped
+    #ports:
+    #  - "3000:3000"
+    labels:
+      caddy: agents.typist.cc
+      caddy.reverse_proxy: "{{upstreams 3000}}"

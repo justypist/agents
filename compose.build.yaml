@@ -1,0 +1,6 @@
+services:
+  agents:
+    image: agents:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
