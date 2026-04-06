@@ -89,3 +89,46 @@ textarea,
 button {
   font: inherit;
 }
+
+.tool-call-line {
+  display: block;
+  white-space: nowrap;
+}
+
+.tool-call-text-running {
+  display: inline-block;
+  color: transparent;
+  background-image: linear-gradient(
+    90deg,
+    var(--muted-foreground) 0%,
+    var(--muted-foreground) 34%,
+    color-mix(in srgb, var(--foreground) 72%, var(--muted-foreground) 28%) 44%,
+    var(--foreground) 49%,
+    color-mix(in srgb, white 78%, var(--foreground) 22%) 50%,
+    var(--foreground) 51%,
+    color-mix(in srgb, var(--foreground) 72%, var(--muted-foreground) 28%) 56%,
+    var(--muted-foreground) 66%,
+    var(--muted-foreground) 100%
+  );
+  background-size: 240% 100%;
+  background-position: 120% 50%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: tool-call-text-scan 1.9s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+
+.tool-call-log {
+  overflow: hidden;
+  padding-left: 1rem;
+  border-left: 1px solid var(--border);
+}
+
+@keyframes tool-call-text-scan {
+  0% {
+    background-position: 120% 50%;
+  }
+
+  100% {
+    background-position: -140% 50%;
+  }
+}

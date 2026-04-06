@@ -1,6 +1,6 @@
 import { convertToModelMessages, type UIMessage } from 'ai';
 
-import { chatAgent } from '@/agents/chat';
+import { researchAgent } from '@/agents/research';
 
 type ChatRequestBody = {
   messages: UIMessage[];
@@ -9,7 +9,7 @@ type ChatRequestBody = {
 export async function POST(request: Request): Promise<Response> {
   const { messages }: ChatRequestBody = await request.json();
 
-  const result = await chatAgent.stream({
+  const result = await researchAgent.stream({
     messages: await convertToModelMessages(messages),
     abortSignal: request.signal,
   });
