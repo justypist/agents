@@ -14,3 +14,10 @@ docker compose -f compose.build.yaml build
 cp .env.example .env
 docker compose -f compose.deploy.yaml up -d
 ```
+
+### transfer
+
+```shell
+docker save agents:latest | ssh vps.56idc.fi 'docker load'
+ssh vps.56idc.fi 'docker compose -f ~/.compose/agents/compose.yaml up -d'
+```
