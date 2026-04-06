@@ -23,7 +23,7 @@ export function ChatMessageItem({
       <p className="mb-3 text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
         {message.role === 'user' ? 'User' : 'Agent'}
       </p>
-      <div className="space-y-2 whitespace-pre-wrap break-words text-sm leading-7 tracking-[-0.01em]">
+      <div className="space-y-2 break-words text-sm leading-7 tracking-[-0.01em]">
         {message.parts.map((part, index) => (
           <ChatMessagePart
             key={`${message.id}-${index}`}
