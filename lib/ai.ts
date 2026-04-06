@@ -2,12 +2,12 @@ import { createOpenAI, OpenAILanguageModelResponsesOptions } from '@ai-sdk/opena
 
 import { config } from '@/config';
 
-export const openai = createOpenAI({
+const openai = createOpenAI({
   baseURL: config.ai.baseUrl,
   apiKey: config.ai.apiKey,
 });
 
-export const model = openai.responses(config.ai.model);
+const model = openai.responses(config.ai.model);
 
 export const options = {
   model,

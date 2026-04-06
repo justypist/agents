@@ -2,8 +2,7 @@ import type { UIMessage } from 'ai';
 import { ToolLoopAgent, stepCountIs } from 'ai';
 
 import { options } from '@/lib/ai';
-import { crawlTool } from '@/tools/crawl';
-import { searchTool } from '@/tools/search';
+import { webSearch } from '@/tools/openai/web-search';
 
 export const researchInstructions = [
   '你是一个中文研究助手，回答要简洁、直接、基于来源。',
@@ -18,10 +17,7 @@ export const researchAgent = new ToolLoopAgent({
   ...options,
   instructions: researchInstructions,
   stopWhen: [stepCountIs(10)],
-  tools: {
-    web_search: searchTool,
-    crawl_page: crawlTool,
-  },
+  tools: { webSearch },
   toolChoice: 'auto',
 });
 
