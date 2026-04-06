@@ -1,7 +1,7 @@
 'use client';
 
 import { useChat } from '@ai-sdk/react';
-import { DefaultChatTransport, isToolUIPart } from 'ai';
+import { DefaultChatTransport, isToolUIPart, type UIMessage } from 'ai';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { ChatComposer } from '@/components/chat/composer/chat-composer';
@@ -20,7 +20,8 @@ export default function Home() {
   const [toolTimings, setToolTimings] = useState<ToolTimingMap>({});
   const [expandedStates, setExpandedStates] = useState<ExpandedStateMap>({});
   const [now, setNow] = useState<number>(() => Date.now());
-  const { messages, sendMessage, status, stop, error } = useChat({
+  const stopRequestedRef = useRef(false);
+  const { messages, sendMessage, setMessages, status, stop, error } = useChat({
     transport: new DefaultChatTransport({
       api: '/api/chat',
     }),
@@ -65,6 +66,15 @@ export default function Home() {
 
     previousStatusRef.current = status;
   }, [status]);
+
+  useEffect(() => {
+    if (isLoading || !stopRequestedRef.current) {
+      return;
+    }
+
+    stopRequestedRef.current = false;
+    setMessages(previousMessages => normalizeAbortedMessages(previousMessages));
+  }, [isLoading, setMessages]);
 
   useEffect(() => {
     const currentTime = Date.now();
@@ -136,6 +146,11 @@ export default function Home() {
     );
   }, [messages]);
 
+  const handleStop = (): void => {
+    stopRequestedRef.current = true;
+    void stop();
+  };
+
   useEffect(() => {
     if (!hasActiveToolCall) {
       return;
@@ -185,10 +200,90 @@ export default function Home() {
             inputRef={inputRef}
             onInputChange={setInput}
             onSubmit={submitMessage}
-            onStop={stop}
+            onStop={handleStop}
           />
         </div>
       </div>
     </main>
   );
+}
+
+function normalizeAbortedMessages(messages: UIMessage[]): UIMessage[] {
+  let changed = false;
+  const nextMessages = [...messages];
+
+  for (let index = nextMessages.length - 1; index >= 0; index -= 1) {
+    const message = nextMessages[index];
+
+    if (message.role !== 'assistant') {
+      continue;
+    }
+
+    const normalizedParts: typeof message.parts = message.parts.map(part => {
+      if (part.type === 'reasoning') {
+        if (part.state !== 'streaming') {
+          return part;
+        }
+
+        changed = true;
+        return {
+          ...part,
+          state: 'done' as const,
+        };
+      }
+
+      if (part.type === 'text') {
+        if (part.state !== 'streaming') {
+          return part;
+        }
+
+        changed = true;
+        return {
+          ...part,
+          state: 'done' as const,
+        };
+      }
+
+      if (!isToolUIPart(part)) {
+        return part;
+      }
+
+      if (
+        part.state === 'input-streaming' ||
+        part.state === 'input-available' ||
+        part.state === 'approval-requested' ||
+        part.state === 'approval-responded'
+      ) {
+        changed = true;
+        const {
+          approval: _approval,
+          output: _output,
+          ...restPart
+        } = part;
+        void _approval;
+        void _output;
+
+        return {
+          ...restPart,
+          state: 'output-error' as const,
+          errorText: '已停止',
+        };
+      }
+
+      return part;
+    });
+
+    if (!changed) {
+      return messages;
+    }
+
+    nextMessages[index] = {
+      ...message,
+      parts: normalizedParts,
+    };
+
+    return nextMessages;
+  }
+
+  return messages;
 }

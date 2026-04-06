@@ -51,11 +51,17 @@ function clampMaxCharacters(value?: number): number {
 export const crawlTool = tool({
   description: '抓取指定网页正文内容，适合在搜索后读取候选来源页面的详细信息',
   inputSchema: crawlInputSchema,
-  execute: async ({ url, maxCharacters }): Promise<CrawlResult> => {
+  execute: async (
+    { url, maxCharacters },
+    { abortSignal },
+  ): Promise<CrawlResult> => {
     const normalizedUrl = normalizeUrl(url);
     const responseUrl = `https://r.jina.ai/http://${normalizedUrl}`;
     const response = await fetch(responseUrl, {
-      signal: AbortSignal.timeout(20000),
+      signal:
+        abortSignal == null
+          ? AbortSignal.timeout(20000)
+          : AbortSignal.any([abortSignal, AbortSignal.timeout(20000)]),
     });
 
     if (!response.ok) {

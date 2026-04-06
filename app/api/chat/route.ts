@@ -1,4 +1,4 @@
-import { convertToModelMessages, type UIMessage } from 'ai';
+import { consumeStream, convertToModelMessages, type UIMessage } from 'ai';
 
 import { researchAgent } from '@/agents/research';
 
@@ -16,5 +16,6 @@ export async function POST(request: Request): Promise<Response> {
 
   return result.toUIMessageStreamResponse({
     sendReasoning: true,
+    consumeSseStream: consumeStream,
   });
 }
