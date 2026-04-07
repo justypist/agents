@@ -40,10 +40,16 @@ export function ChatComposer({
             value={input}
             onChange={event => onInputChange(event.target.value)}
             onKeyDown={event => {
-              if (event.key === 'Enter' && event.ctrlKey) {
-                event.preventDefault();
-                onSubmit();
+              if (
+                event.key !== 'Enter' ||
+                event.shiftKey ||
+                event.nativeEvent.isComposing
+              ) {
+                return;
               }
+
+              event.preventDefault();
+              onSubmit();
             }}
             placeholder="输入你的问题..."
             disabled={isLoading}
