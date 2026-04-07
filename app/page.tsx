@@ -6,12 +6,16 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { ChatComposer } from '@/components/chat/composer/chat-composer';
 import { ChatHeader } from '@/components/chat/layout/chat-header';
-import { ChatMessageList } from '@/components/chat/message/chat-message-list';
 import { isToolActive, isToolFinished } from '@/components/chat/helpers';
+import { ChatMessageList } from '@/components/chat/message/chat-message-list';
 import type {
   ExpandedStateMap,
   ToolTimingMap,
 } from '@/components/chat/types';
+
+type ContinueRequestBody = {
+  continuation: true;
+};
 
 export default function Home() {
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -20,8 +24,17 @@ export default function Home() {
   const [toolTimings, setToolTimings] = useState<ToolTimingMap>({});
   const [expandedStates, setExpandedStates] = useState<ExpandedStateMap>({});
   const [now, setNow] = useState<number>(() => Date.now());
+  const [canContinue, setCanContinue] = useState(false);
   const stopRequestedRef = useRef(false);
-  const { messages, sendMessage, setMessages, status, stop, error } = useChat({
+  const {
+    messages,
+    sendMessage,
+    setMessages,
+    status,
+    stop,
+    error,
+    clearError,
+  } = useChat({
     transport: new DefaultChatTransport({
       api: '/api/chat',
     }),
@@ -29,6 +42,7 @@ export default function Home() {
   const previousStatusRef = useRef(status);
 
   const isLoading = status === 'submitted' || status === 'streaming';
+  const canContinueResponse = canContinue || error != null;
   const lastMessage = messages[messages.length - 1];
   const shouldShowPendingReply =
     isLoading &&
@@ -42,6 +56,7 @@ export default function Home() {
       return;
     }
 
+    setCanContinue(false);
     void sendMessage({ text: trimmedInput });
     setInput('');
   };
@@ -73,8 +88,20 @@ export default function Home() {
     }
 
     stopRequestedRef.current = false;
-    setMessages(previousMessages => normalizeAbortedMessages(previousMessages));
+    setMessages(previousMessages =>
+      normalizeInterruptedMessages(previousMessages, '已停止'),
+    );
   }, [isLoading, setMessages]);
+
+  useEffect(() => {
+    if (isLoading || error == null) {
+      return;
+    }
+
+    setMessages(previousMessages =>
+      normalizeInterruptedMessages(previousMessages, '请求中断'),
+    );
+  }, [error, isLoading, setMessages]);
 
   useEffect(() => {
     const currentTime = Date.now();
@@ -147,8 +174,28 @@ export default function Home() {
   }, [messages]);
 
   const handleStop = (): void => {
+    setCanContinue(true);
     stopRequestedRef.current = true;
     void stop();
+  };
+
+  const handleContinue = (): void => {
+    if (isLoading || messages.length === 0) {
+      return;
+    }
+
+    setCanContinue(false);
+    clearError();
+    void sendMessage(
+      {
+        text: '继续',
+      },
+      {
+        body: {
+          continuation: true,
+        } satisfies ContinueRequestBody,
+      },
+    );
   };
 
   useEffect(() => {
@@ -197,9 +244,11 @@ export default function Home() {
             input={input}
             isLoading={isLoading}
             hasError={error != null}
+            canContinue={canContinueResponse}
             inputRef={inputRef}
             onInputChange={setInput}
             onSubmit={submitMessage}
+            onContinue={handleContinue}
             onStop={handleStop}
           />
         </div>
@@ -208,7 +257,10 @@ export default function Home() {
   );
 }
 
-function normalizeAbortedMessages(messages: UIMessage[]): UIMessage[] {
+function normalizeInterruptedMessages(
+  messages: UIMessage[],
+  toolErrorText: string,
+): UIMessage[] {
   let changed = false;
   const nextMessages = [...messages];
 
@@ -266,7 +318,7 @@ function normalizeAbortedMessages(messages: UIMessage[]): UIMessage[] {
         return {
           ...restPart,
           state: 'output-error' as const,
-          errorText: '已停止',
+          errorText: toolErrorText,
         };
       }
 

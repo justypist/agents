@@ -4,9 +4,11 @@ type ChatComposerProps = {
   input: string;
   isLoading: boolean;
   hasError: boolean;
+  canContinue: boolean;
   inputRef: RefObject<HTMLTextAreaElement | null>;
   onInputChange: (value: string) => void;
   onSubmit: () => void;
+  onContinue: () => void;
   onStop: () => void;
 };
 
@@ -14,9 +16,11 @@ export function ChatComposer({
   input,
   isLoading,
   hasError,
+  canContinue,
   inputRef,
   onInputChange,
   onSubmit,
+  onContinue,
   onStop,
 }: ChatComposerProps) {
   return (
@@ -65,13 +69,24 @@ export function ChatComposer({
               停止
             </button>
           ) : (
-            <button
-              type="submit"
-              disabled={input.trim().length === 0}
-              className="absolute bottom-3 right-3 h-8 bg-background px-3 text-sm text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-background"
-            >
-              发送
-            </button>
+            <>
+              {canContinue ? (
+                <button
+                  type="button"
+                  onClick={onContinue}
+                  className="absolute bottom-3 right-16 h-8 bg-background px-3 text-sm text-foreground transition-colors hover:bg-muted"
+                >
+                  继续
+                </button>
+              ) : null}
+              <button
+                type="submit"
+                disabled={input.trim().length === 0}
+                className="absolute bottom-3 right-3 h-8 bg-background px-3 text-sm text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-background"
+              >
+                发送
+              </button>
+            </>
           )}
         </div>
       </form>
