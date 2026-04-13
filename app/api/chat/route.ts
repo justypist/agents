@@ -5,7 +5,7 @@ import {
   type UIMessage,
 } from 'ai';
 
-import { researchAgent } from '@/agents/research';
+import { defaultAgent } from '@/agents/default';
 
 type ChatRequestBody = {
   messages: UIMessage[];
@@ -22,7 +22,7 @@ export async function POST(request: Request): Promise<Response> {
   const { messages, continuation }: ChatRequestBody = await request.json();
   const modelMessages = await convertToModelMessages(messages);
 
-  const result = await researchAgent.stream({
+  const result = await defaultAgent.stream({
     messages:
       continuation === true
         ? [...modelMessages, continuationMessage]
