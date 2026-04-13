@@ -12,7 +12,7 @@ docker compose -f compose.build.yaml build
 
 ```shell
 cp .env.example .env
-docker compose -f compose.deploy.yaml up -d
+docker compose -f compose.prod.yaml up -d
 ```
 
 ### transfer
