@@ -1,0 +1,18 @@
+services:
+  agents:
+    image: agents:latest
+    container_name: agents
+    restart: unless-stopped
+    env_file:
+      - .env
+    networks:
+      - public
+    #ports:
+    #  - "3000:3000"
+    labels:
+      caddy: agents.typist.cc
+      caddy.reverse_proxy: "{{upstreams 3000}}"
+
+networks:
+  public:
+    external: true
