@@ -56,7 +56,7 @@ export const crawlTool = tool({
     { abortSignal },
   ): Promise<CrawlResult> => {
     const normalizedUrl = normalizeUrl(url);
-    const responseUrl = `https://r.jina.ai/http://${normalizedUrl}`;
+    const responseUrl = `https://r.jina.ai/${normalizedUrl}`;
     const response = await fetch(responseUrl, {
       signal:
         abortSignal == null
