@@ -14,7 +14,7 @@ export const config = {
   },
   pubmed: {
     tool: process.env.PUBMED_TOOL?.trim() || "agents",
-    email: process.env.PUBMED_EMAIL?.trim() || "",
-    apiKey: process.env.PUBMED_API_KEY?.trim() || "",
+    email: process.env.PUBMED_EMAIL?.trim() || "pubmed@example.com",
+    apiKey: process.env.PUBMED_API_KEY?.trim() || "xxx",
   }
 }
