@@ -18,6 +18,6 @@ docker compose -f compose.prod.yaml up -d
 ### transfer
 
 ```shell
-docker save agents:latest | ssh vps.56idc.fi 'docker load'
-ssh vps.56idc.fi 'docker compose -f ~/.compose/agents/compose.yaml up -d'
+docker save agents:latest | ssh master 'docker load'
+ssh master 'docker compose -f ~/.compose/agents/compose.yaml up -d'
 ```
