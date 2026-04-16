@@ -11,5 +11,10 @@ export const config = {
   },
   tavily: {
     apiKey: process.env.TAVILY_API_KEY?.trim() || "tvly-xxx",
+  },
+  pubmed: {
+    tool: process.env.PUBMED_TOOL?.trim() || "agents",
+    email: process.env.PUBMED_EMAIL?.trim() || "",
+    apiKey: process.env.PUBMED_API_KEY?.trim() || "",
   }
 }
