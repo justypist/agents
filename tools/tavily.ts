@@ -1,5 +1,6 @@
 import { type TavilySearchOptions, type TavilySearchResponse } from '@tavily/core';
 import { jsonSchema, tool } from 'ai';
+
 import { tvly } from '@/lib/tavily';
 
 const DEFAULT_MAX_RESULTS = 4;
@@ -12,7 +13,7 @@ const MAX_CONTENT_CHARS = 1200;
 const MAX_RAW_CONTENT_CHARS = 2000;
 const MAX_IMAGES = 4;
 
-type TavilySearchToolInput = {
+export type TavilySearchToolInput = {
   query: string;
   maxResults?: number;
   topic?: 'general' | 'news' | 'finance';
@@ -24,7 +25,7 @@ type TavilySearchToolInput = {
   days?: number;
 };
 
-type TavilySearchToolResult = Pick<
+export type TavilySearchToolResult = Pick<
   TavilySearchResponse,
   'query' | 'answer' | 'responseTime' | 'results' | 'images' | 'requestId'
 >;
@@ -145,23 +146,28 @@ function buildSearchOptions(input: TavilySearchToolInput): TavilySearchOptions {
   };
 }
 
+export async function executeTavilySearch(
+  input: TavilySearchToolInput,
+): Promise<TavilySearchToolResult> {
+  const response = await tvly.search(normalizeQuery(input.query), buildSearchOptions(input));
+
+  return {
+    query: response.query,
+    answer: truncateText(response.answer, 800),
+    responseTime: response.responseTime,
+    results: response.results.map(result => ({
+      ...result,
+      content: truncateText(result.content, MAX_CONTENT_CHARS) ?? '',
+      rawContent: truncateText(result.rawContent, MAX_RAW_CONTENT_CHARS),
+    })),
+    images: response.images.slice(0, MAX_IMAGES),
+    requestId: response.requestId,
+  };
+}
+
 export const tavilySearchTool = tool({
   description: '使用 Tavily 执行联网搜索，返回答案摘要、候选来源和裁剪后的网页片段',
   inputSchema: tavilySearchInputSchema,
-  execute: async (input): Promise<TavilySearchToolResult> => {
-    const response = await tvly.search(normalizeQuery(input.query), buildSearchOptions(input));
-
-    return {
-      query: response.query,
-      answer: truncateText(response.answer, 800),
-      responseTime: response.responseTime,
-      results: response.results.map(result => ({
-        ...result,
-        content: truncateText(result.content, MAX_CONTENT_CHARS) ?? '',
-        rawContent: truncateText(result.rawContent, MAX_RAW_CONTENT_CHARS),
-      })),
-      images: response.images.slice(0, MAX_IMAGES),
-      requestId: response.requestId,
-    };
-  },
+  execute: async input => executeTavilySearch(input),
 });
+
