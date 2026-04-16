@@ -5,11 +5,12 @@ import {
   type UIMessage,
 } from 'ai';
 
-import { defaultAgent } from '@/agents/default';
+import { resolveRequestedAgent } from '@/lib/agent-registry';
 
 type ChatRequestBody = {
   messages: UIMessage[];
   continuation?: boolean;
+  agentId?: string;
 };
 
 const continuationMessage: ModelMessage = {
@@ -19,14 +20,28 @@ const continuationMessage: ModelMessage = {
 };
 
 export async function POST(request: Request): Promise<Response> {
-  const { messages, continuation }: ChatRequestBody = await request.json();
-  const modelMessages = await convertToModelMessages(messages);
+  const { messages, continuation, agentId }: ChatRequestBody =
+    await request.json();
+  const resolvedAgent = await resolveRequestedAgent(agentId);
 
-  const result = await defaultAgent.stream({
-    messages:
-      continuation === true
-        ? [...modelMessages, continuationMessage]
-        : modelMessages,
+  if (resolvedAgent == null) {
+    return Response.json(
+      {
+        error: 'Unknown agentId',
+      },
+      {
+        status: 400,
+      },
+    );
+  }
+
+  const modelMessages = await convertToModelMessages(messages);
+  const streamMessages =
+    continuation === true
+      ? [...modelMessages, continuationMessage]
+      : modelMessages;
+  const result = await resolvedAgent.agent.stream({
+    messages: streamMessages,
     abortSignal: request.signal,
   });
 

@@ -1,5 +1,6 @@
 import type { UIMessage } from 'ai';
 import { ToolLoopAgent, stepCountIs } from 'ai';
+
 import { options } from '@/lib/ai';
 
 export const chatInstructions = [
@@ -8,7 +9,7 @@ export const chatInstructions = [
   '优先给出清晰、准确、可执行的回答。',
 ].join('\n');
 
-export const chatAgent = new ToolLoopAgent({
+export const agent = new ToolLoopAgent({
   ...options,
   instructions: chatInstructions,
   stopWhen: [stepCountIs(10)],

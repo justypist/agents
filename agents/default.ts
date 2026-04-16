@@ -11,7 +11,7 @@ export const defaultAgentInstructions = [
   '回答必须清晰，避免编造；若存在不确定性要明确说明。',
 ].join('\n');
 
-export const defaultAgent = new ToolLoopAgent({
+export const agent = new ToolLoopAgent({
   ...options,
   instructions: defaultAgentInstructions,
   stopWhen: [stepCountIs(128)],

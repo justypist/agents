@@ -13,7 +13,7 @@ export const researchInstructions = [
   '如果信息不足或来源互相冲突，要明确说明。',
 ].join('\n');
 
-export const researchAgent = new ToolLoopAgent({
+export const agent = new ToolLoopAgent({
   ...options,
   instructions: researchInstructions,
   stopWhen: [stepCountIs(10)],
