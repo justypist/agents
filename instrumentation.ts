@@ -3,7 +3,7 @@ export async function register() {
     return;
   }
 
-  const { initializeWebshareProxies } = await import("@/lib/webshare");
+  const { initializeWebshareProxies, getProxyURL } = await import("@/lib/webshare");
 
   const proxies = await initializeWebshareProxies();
   console.log({ proxies });

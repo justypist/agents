@@ -187,3 +187,16 @@ export const initializeWebshareProxies = async (): Promise<string[]> => {
     throw error;
   }
 };
+
+export const getProxyURL = (() => {
+  let cursor = 0;
+
+  return () => {
+    if (config.webshare.proxies.length === 0) {
+      return null
+    }
+    const idx = cursor++ % config.webshare.proxies.length
+    const url = config.webshare.proxies[idx]
+    return url
+  }
+})()
