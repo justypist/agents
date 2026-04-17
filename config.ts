@@ -22,5 +22,6 @@ export const config = {
   },
   webshare: {
     apiKey: process.env.WEBSHARE_API_KEY?.trim() || "xxx",
+    proxies: [] as string[],
   },
 };
