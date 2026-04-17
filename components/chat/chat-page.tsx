@@ -27,7 +27,7 @@ export function ChatPage({ agentId, agentTitle }: ChatPageProps) {
   const { messages, sendMessage, setMessages, status, stop, error, clearError } =
     useChat({
       transport: new DefaultChatTransport({
-        api: `/api/${agentId}/openai`,
+        api: `/api/${agentId}`,
       }),
     });
   const previousStatusRef = useRef(status);
