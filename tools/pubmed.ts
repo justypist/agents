@@ -88,6 +88,11 @@ type PubmedSearchToolResult = {
   articles: PubmedArticle[];
 };
 
+type PubmedFetchResult = {
+  response: Response;
+  proxyURL: string | null;
+};
+
 const pubmedSearchInputSchema = jsonSchema<PubmedSearchToolInput>({
   type: 'object',
   properties: {
@@ -277,24 +282,61 @@ async function fetchPubmedJson<T>(
   path: string,
   params: URLSearchParams,
 ): Promise<T> {
-  const response = await fetchPubmed(`${PUBMED_EUTILS_BASE_URL}/${path}?${params.toString()}`, {
-    cache: 'no-store',
-    headers: {
-      accept: 'application/json',
+  const { response, proxyURL } = await fetchPubmed(
+    `${PUBMED_EUTILS_BASE_URL}/${path}?${params.toString()}`,
+    {
+      cache: 'no-store',
+      headers: {
+        accept: 'application/json',
+      },
     },
-  });
+  );
+  const contentType = response.headers.get('content-type') ?? '';
+  const bodyText = await response.text();
 
   if (!response.ok) {
-    throw new Error(`PubMed 请求失败: ${response.status} ${response.statusText}`);
+    throw new Error(
+      formatPubmedResponseError({
+        message: `PubMed 请求失败: ${response.status} ${response.statusText}`,
+        path,
+        contentType,
+        bodyText,
+        proxyURL,
+      }),
+    );
   }
 
-  return (await response.json()) as T;
+  if (!contentType.toLowerCase().includes('json')) {
+    throw new Error(
+      formatPubmedResponseError({
+        message: 'PubMed 返回了非 JSON 响应',
+        path,
+        contentType,
+        bodyText,
+        proxyURL,
+      }),
+    );
+  }
+
+  try {
+    return JSON.parse(bodyText) as T;
+  } catch {
+    throw new Error(
+      formatPubmedResponseError({
+        message: 'PubMed JSON 解析失败',
+        path,
+        contentType,
+        bodyText,
+        proxyURL,
+      }),
+    );
+  }
 }
 
 async function fetchPubmedArticleDetails(
   pmids: string[],
 ): Promise<Map<string, PubmedArticleDetails>> {
-  const response = await fetchPubmed(
+  const { response, proxyURL } = await fetchPubmed(
     `${PUBMED_EUTILS_BASE_URL}/efetch.fcgi?${createPubmedParams({
       db: 'pubmed',
       id: pmids.join(','),
@@ -307,26 +349,88 @@ async function fetchPubmedArticleDetails(
       },
     },
   );
+  const contentType = response.headers.get('content-type') ?? '';
 
   if (!response.ok) {
-    throw new Error(`PubMed 摘要请求失败: ${response.status} ${response.statusText}`);
+    const bodyText = await response.text();
+    throw new Error(
+      formatPubmedResponseError({
+        message: `PubMed 摘要请求失败: ${response.status} ${response.statusText}`,
+        path: 'efetch.fcgi',
+        contentType,
+        bodyText,
+        proxyURL,
+      }),
+    );
   }
 
   const xml = await response.text();
+
+  if (contentType.toLowerCase().includes('html')) {
+    throw new Error(
+      formatPubmedResponseError({
+        message: 'PubMed 摘要接口返回了 HTML 响应',
+        path: 'efetch.fcgi',
+        contentType,
+        bodyText: xml,
+        proxyURL,
+      }),
+    );
+  }
+
   return parsePubmedArticleDetails(xml);
 }
 
 async function fetchPubmed(
   input: string | URL,
   init: RequestInit,
-): Promise<Response> {
+): Promise<PubmedFetchResult> {
   const proxyURL = getProxyURL();
   const dispatcher = proxyURL == null ? undefined : getOrCreatePubmedProxyAgent(proxyURL);
-
-  return fetch(input, {
+  const response = await fetch(input, {
     ...init,
     ...(dispatcher == null ? {} : { dispatcher }),
   });
+
+  return {
+    response,
+    proxyURL,
+  };
+}
+
+function formatPubmedResponseError({
+  message,
+  path,
+  contentType,
+  bodyText,
+  proxyURL,
+}: {
+  message: string;
+  path: string;
+  contentType: string;
+  bodyText: string;
+  proxyURL: string | null;
+}): string {
+  const normalizedContentType = contentType.length > 0 ? contentType : 'unknown';
+  const transport = proxyURL == null ? 'direct' : `proxy(${maskProxyURL(proxyURL)})`;
+  const preview = sanitizeBodyPreview(bodyText);
+
+  return `${message}; endpoint=${path}; content-type=${normalizedContentType}; transport=${transport}; body-preview=${preview}`;
+}
+
+function sanitizeBodyPreview(value: string): string {
+  const preview = value.replace(/\s+/g, ' ').trim().slice(0, 240);
+  return preview.length > 0 ? JSON.stringify(preview) : '"<empty>"';
+}
+
+function maskProxyURL(proxyURL: string): string {
+  try {
+    const url = new URL(proxyURL);
+    const port = url.port.length > 0 ? `:${url.port}` : '';
+    return `${url.protocol}//${url.hostname}${port}`;
+  } catch {
+    return '<invalid-proxy-url>';
+  }
 }
 
 function getOrCreatePubmedProxyAgent(proxyURL: string): ProxyAgent {
