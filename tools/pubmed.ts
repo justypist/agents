@@ -1,6 +1,8 @@
 import { jsonSchema, tool } from 'ai';
+import { ProxyAgent } from 'undici';
 
 import { config } from '@/config';
+import { getProxyURL } from '@/lib/webshare';
 
 const PUBMED_EUTILS_BASE_URL =
   'https://eutils.ncbi.nlm.nih.gov/entrez/eutils';
@@ -9,6 +11,7 @@ const DEFAULT_MAX_RESULTS = 5;
 const MAX_MAX_RESULTS = 10;
 const DEFAULT_SORT = 'pub_date' as const;
 const MAX_ABSTRACT_CHARS = 2400;
+const pubmedProxyAgents = new Map<string, ProxyAgent>();
 
 type PubmedSearchSort = 'relevance' | 'pub_date' | 'author' | 'journal';
 
@@ -274,7 +277,7 @@ async function fetchPubmedJson<T>(
   path: string,
   params: URLSearchParams,
 ): Promise<T> {
-  const response = await fetch(`${PUBMED_EUTILS_BASE_URL}/${path}?${params.toString()}`, {
+  const response = await fetchPubmed(`${PUBMED_EUTILS_BASE_URL}/${path}?${params.toString()}`, {
     cache: 'no-store',
     headers: {
       accept: 'application/json',
@@ -291,7 +294,7 @@ async function fetchPubmedJson<T>(
 async function fetchPubmedArticleDetails(
   pmids: string[],
 ): Promise<Map<string, PubmedArticleDetails>> {
-  const response = await fetch(
+  const response = await fetchPubmed(
     `${PUBMED_EUTILS_BASE_URL}/efetch.fcgi?${createPubmedParams({
       db: 'pubmed',
       id: pmids.join(','),
@@ -311,6 +314,31 @@ async function fetchPubmedArticleDetails(
 
   const xml = await response.text();
   return parsePubmedArticleDetails(xml);
+}
+
+async function fetchPubmed(
+  input: string | URL,
+  init: RequestInit,
+): Promise<Response> {
+  const proxyURL = getProxyURL();
+  const dispatcher = proxyURL == null ? undefined : getOrCreatePubmedProxyAgent(proxyURL);
+
+  return fetch(input, {
+    ...init,
+    ...(dispatcher == null ? {} : { dispatcher }),
+  });
+}
+
+function getOrCreatePubmedProxyAgent(proxyURL: string): ProxyAgent {
+  const existingAgent = pubmedProxyAgents.get(proxyURL);
+
+  if (existingAgent != null) {
+    return existingAgent;
+  }
+
+  const nextAgent = new ProxyAgent(proxyURL);
+  pubmedProxyAgents.set(proxyURL, nextAgent);
+  return nextAgent;
 }
 
 function parsePubmedArticleDetails(xml: string): Map<string, PubmedArticleDetails> {
