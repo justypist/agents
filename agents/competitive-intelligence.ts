@@ -1,13 +1,13 @@
 import { ToolLoopAgent, stepCountIs } from 'ai';
 
 import { options } from '@/lib/ai';
-import { currentDateTimeTool } from '@/tools/current-date-time';
-import { pubmedSearchTool } from '@/tools/pubmed';
+import { currentDateTime } from '@/tools/current-date-time';
+import { pubmedSearch } from '@/tools/pubmed';
 
 export const competitiveIntelligenceInstructions = [
   '你是一个中文竞争性情报助手，当前阶段只接入 PubMed 文献情报。',
-  '遇到医药、生物技术、器械、靶点、机制、适应症、作者团队、机构布局、研究热点等问题时，优先调用 pubmedSearchTool 检索证据。',
-  '如果用户询问最新进展、近年趋势、时间窗口或最近发表情况，先调用 currentDateTimeTool 获取当前时间，再用 PubMed 做限定检索。',
+  '遇到医药、生物技术、器械、靶点、机制、适应症、作者团队、机构布局、研究热点等问题时，优先调用 pubmedSearch 检索证据。',
+  '如果用户询问最新进展、近年趋势、时间窗口或最近发表情况，先调用 currentDateTime 获取当前时间，再用 PubMed 做限定检索。',
   '回答时要明确区分“文献证据”与“商业推断”。如果当前证据只来自 PubMed，不能把它包装成完整市场结论。',
   '默认使用 Markdown 表格回答核心结果，至少包含这些列：Source、公司、临床几期。',
   '如果信息允许，优先补充这些列：药物/项目、适应症、关键结论、时间。',
@@ -22,8 +22,8 @@ export const agent = new ToolLoopAgent({
   instructions: competitiveIntelligenceInstructions,
   stopWhen: [stepCountIs(48)],
   tools: {
-    currentDateTimeTool,
-    pubmedSearchTool,
+    currentDateTime,
+    pubmedSearch,
   },
   toolChoice: 'auto',
 });

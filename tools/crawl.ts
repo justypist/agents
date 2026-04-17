@@ -48,7 +48,7 @@ function clampMaxCharacters(value?: number): number {
   return Math.min(Math.max(Math.floor(value), 1000), 20000);
 }
 
-export const crawlTool = tool({
+export const crawl = tool({
   description: '抓取指定网页正文内容，适合在搜索后读取候选来源页面的详细信息',
   inputSchema: crawlInputSchema,
   execute: async (

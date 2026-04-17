@@ -165,7 +165,7 @@ export async function executeTavilySearch(
   };
 }
 
-export const tavilySearchTool = tool({
+export const tavilySearch = tool({
   description: '使用 Tavily 执行联网搜索，返回答案摘要、候选来源和裁剪后的网页片段',
   inputSchema: tavilySearchInputSchema,
   execute: async input => executeTavilySearch(input),

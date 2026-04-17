@@ -119,7 +119,7 @@ const pubmedSearchInputSchema = jsonSchema<PubmedSearchToolInput>({
   required: ['query'],
 });
 
-export const pubmedSearchTool = tool({
+export const pubmedSearch = tool({
   description:
     '直接调用 PubMed E-utilities 搜索文献，返回 PMID、标题、作者、期刊、日期、DOI、链接和可选摘要',
   inputSchema: pubmedSearchInputSchema,
