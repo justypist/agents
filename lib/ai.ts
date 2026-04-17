@@ -1,3 +1,4 @@
+import { LanguageModel } from 'ai'
 import { createOpenAI, OpenAILanguageModelResponsesOptions } from '@ai-sdk/openai';
 
 import { config } from '@/config';
@@ -7,7 +8,15 @@ const openai = createOpenAI({
   apiKey: config.ai.apiKey,
 });
 
-const model = openai.responses(config.ai.model);
+let model: LanguageModel;
+
+switch (config.ai.method) {
+  case "responses":
+    model = openai.responses(config.ai.model);
+  case "chat-completions":
+  default:
+    model = openai.chat(config.ai.model);
+}
 
 export const options = {
   model,
