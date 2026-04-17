@@ -13,6 +13,7 @@ let model: LanguageModel;
 switch (config.ai.method) {
   case "responses":
     model = openai.responses(config.ai.model);
+    break;
   case "chat-completions":
   default:
     model = openai.chat(config.ai.model);
