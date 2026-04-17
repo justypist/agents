@@ -10,10 +10,6 @@ import { ChatHeader } from '@/components/chat/layout/chat-header';
 import { ChatMessageList } from '@/components/chat/message/chat-message-list';
 import type { ExpandedStateMap, ToolTimingMap } from '@/components/chat/types';
 
-type ContinueRequestBody = {
-  continuation: true;
-};
-
 type ChatPageProps = {
   agentId: string;
   agentTitle: string;
@@ -31,10 +27,7 @@ export function ChatPage({ agentId, agentTitle }: ChatPageProps) {
   const { messages, sendMessage, setMessages, status, stop, error, clearError } =
     useChat({
       transport: new DefaultChatTransport({
-        api: '/api/chat',
-        body: {
-          agentId,
-        },
+        api: `/api/${agentId}/openai`,
       }),
     });
   const previousStatusRef = useRef(status);
@@ -184,16 +177,9 @@ export function ChatPage({ agentId, agentTitle }: ChatPageProps) {
 
     setCanContinue(false);
     clearError();
-    void sendMessage(
-      {
-        text: '继续',
-      },
-      {
-        body: {
-          continuation: true,
-        } satisfies ContinueRequestBody,
-      },
-    );
+    void sendMessage({
+      text: '请从上一条助手回复中断的位置继续，不要重复已经完成的内容。只补全后续内容。',
+    });
   };
 
   useEffect(() => {
