@@ -19,5 +19,8 @@ export const config = {
     tool: process.env.PUBMED_TOOL?.trim() || "agents",
     email: process.env.PUBMED_EMAIL?.trim() || "pubmed@example.com",
     apiKey: process.env.PUBMED_API_KEY?.trim() || "xxx",
-  }
-}
+  },
+  webshare: {
+    apiKey: process.env.WEBSHARE_API_KEY?.trim() || "xxx",
+  },
+};
