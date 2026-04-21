@@ -43,12 +43,17 @@ export function ChatPage({
 
   const isLoading = status === 'submitted' || status === 'streaming';
   const canContinueResponse = canContinue || error != null;
-  const lastMessage = messages[messages.length - 1];
+  const visibleMessages = useMemo(
+    () =>
+      messages.filter(
+        message => !(message.role === 'assistant' && message.parts.length === 0),
+      ),
+    [messages],
+  );
+  const lastMessage = visibleMessages[visibleMessages.length - 1];
   const shouldShowPendingReply =
     isLoading &&
-    (lastMessage == null ||
-      lastMessage.role !== 'assistant' ||
-      lastMessage.parts.length === 0);
+    (lastMessage == null || lastMessage.role !== 'assistant');
 
   const submitMessage = (): void => {
     const trimmedInput = input.trim();
@@ -219,7 +224,7 @@ export function ChatPage({
       <div className="flex-1 overflow-y-auto px-4 py-6 sm:px-6">
         <div className="mx-auto flex w-full max-w-4xl flex-col gap-4">
           <ChatMessageList
-            messages={messages}
+            messages={visibleMessages}
             expandedStates={expandedStates}
             toolTimings={toolTimings}
             now={now}
