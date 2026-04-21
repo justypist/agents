@@ -1,7 +1,7 @@
 import { type TavilySearchOptions, type TavilySearchResponse } from '@tavily/core';
 import { jsonSchema, tool } from 'ai';
 
-import { tvly } from '@/lib/tavily';
+import { getTavilyClient } from '@/lib/tavily';
 
 const DEFAULT_MAX_RESULTS = 4;
 const MAX_MAX_RESULTS = 10;
@@ -149,7 +149,10 @@ function buildSearchOptions(input: TavilySearchToolInput): TavilySearchOptions {
 export async function executeTavilySearch(
   input: TavilySearchToolInput,
 ): Promise<TavilySearchToolResult> {
-  const response = await tvly.search(normalizeQuery(input.query), buildSearchOptions(input));
+  const response = await getTavilyClient().search(
+    normalizeQuery(input.query),
+    buildSearchOptions(input),
+  );
 
   return {
     query: response.query,
@@ -170,4 +173,3 @@ export const tavilySearch = tool({
   inputSchema: tavilySearchInputSchema,
   execute: async input => executeTavilySearch(input),
 });
-

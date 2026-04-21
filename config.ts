@@ -17,7 +17,10 @@ export const config = {
     url: process.env.DATABASE_URL?.trim() || 'file:.data/agents.sqlite',
   },
   tavily: {
-    apiKey: process.env.TAVILY_API_KEY?.trim() || 'tvly-xxx',
+    apiKeys: (process.env.TAVILY_API_KEY || 'tvly-xxx')
+      .split(',')
+      .map(item => item.trim())
+      .filter(item => item.length > 0),
   },
   pubmed: {
     tool: process.env.PUBMED_TOOL?.trim() || 'agents',
