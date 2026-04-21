@@ -20,7 +20,26 @@ docker compose -f compose.prod.yaml up -d
 当前聊天页面路由：`/{agentId}/{sessionId}`
 
 - 访问 `/` 会先跳转到 `/default`
-- 访问 `/{agentId}` 会自动创建 session 并跳转到 `/{agentId}/{sessionId}`
+- 访问 `/{agentId}` 会先调用 `POST /api/{agentId}/sessions`，再跳转到 `/{agentId}/{sessionId}`
+
+### Create Session
+
+直接调用 API 时，需要先创建 session：
+
+```shell
+curl -X POST 'http://localhost:3000/api/competitive-intelligence/sessions'
+```
+
+返回示例：
+
+```json
+{
+  "agentId": "competitive-intelligence",
+  "sessionId": "...",
+  "chatPath": "/competitive-intelligence/...",
+  "apiPath": "/api/competitive-intelligence/..."
+}
+```
 
 推荐直接使用 `useChat` 调用会话 API：
 
