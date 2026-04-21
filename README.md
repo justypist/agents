@@ -15,9 +15,35 @@ cp .env.example .env
 docker compose -f compose.prod.yaml up -d
 ```
 
+生产镜像启动时会自动执行数据库迁移。
+
 ## API
 
-推荐直接使用 useChat 调用
+当前聊天页面路由：`/{agentId}/{sessionId}`
+
+- 访问 `/` 会先跳转到 `/default`
+- 访问 `/{agentId}` 会在请求时创建新 session，再跳转到 `/{agentId}/{sessionId}`
+
+### Create Session
+
+直接调用 API 时，需要先创建 session：
+
+```shell
+curl -X POST 'http://localhost:3000/api/competitive-intelligence/sessions'
+```
+
+返回示例：
+
+```json
+{
+  "agentId": "competitive-intelligence",
+  "sessionId": "...",
+  "chatPath": "/competitive-intelligence/...",
+  "apiPath": "/api/competitive-intelligence/..."
+}
+```
+
+推荐直接使用 `useChat` 调用会话 API：
 
 ```ts
 import { useChat } from '@ai-sdk/react' 
@@ -25,8 +51,9 @@ import { DefaultChatTransport } from 'ai';
 
 
 const { messages } = useChat({
+  id: sessionId,
   transport: new DefaultChatTransport({
-    api: `/api/competitive-intelligence`,
+    api: `/api/competitive-intelligence/${sessionId}`,
   }),
 });
 ```
@@ -35,9 +62,10 @@ const { messages } = useChat({
 
 ```shell
 curl -N \
--X POST 'http://localhost:3000/api/competitive-intelligence' \
+-X POST 'http://localhost:3000/api/competitive-intelligence/<sessionId>' \
 -H 'Content-Type: application/json' \
 -d '{
+  "id": "<sessionId>",
   "messages": [
     {
       "role": "user",

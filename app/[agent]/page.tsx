@@ -1,25 +1,15 @@
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 
-import { ChatPage } from '@/components/chat/chat-page';
-import { getAgentByRouteSegment, getRouteAgents } from '@/lib/agent-registry';
+import { createChatSession } from '@/lib/chat-sessions';
+import { getAgentByRouteSegment } from '@/lib/agent-registry';
+
+export const dynamic = 'force-dynamic';
 
 type AgentPageProps = {
   params: Promise<{
     agent: string;
   }>;
 };
-
-export async function generateStaticParams(): Promise<
-  Array<{
-    agent: string;
-  }>
-> {
-  const routeAgents = await getRouteAgents();
-
-  return routeAgents.map(agent => ({
-    agent: agent.routeSegment!,
-  }));
-}
 
 export default async function AgentPage({ params }: AgentPageProps) {
   const { agent } = await params;
@@ -29,10 +19,7 @@ export default async function AgentPage({ params }: AgentPageProps) {
     notFound();
   }
 
-  return (
-    <ChatPage
-      agentId={resolvedAgent.id}
-      agentTitle={resolvedAgent.displayName}
-    />
-  );
+  const sessionId = await createChatSession(resolvedAgent.id);
+
+  redirect(`/${resolvedAgent.routeSegment}/${sessionId}`);
 }

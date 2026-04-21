@@ -1,0 +1,12 @@
+import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+
+export const chatSessions = sqliteTable('chat_sessions', {
+  id: text('id').primaryKey(),
+  agentId: text('agent_id').notNull(),
+  messages: text('messages').notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+});
+
+export type ChatSessionRow = typeof chatSessions.$inferSelect;
+export type NewChatSessionRow = typeof chatSessions.$inferInsert;

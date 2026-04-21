@@ -20,6 +20,12 @@
   --accent: #111111;
   --accent-foreground: #fafafa;
   --selection: rgba(0, 0, 0, 0.08);
+  --font-geist-sans:
+    "Inter", "Segoe UI", "Helvetica Neue", Arial, BlinkMacSystemFont,
+    system-ui, sans-serif;
+  --font-geist-mono:
+    "SFMono-Regular", "SF Mono", Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
 }
 
 @media (prefers-color-scheme: dark) {
