@@ -6,5 +6,8 @@ export async function register() {
   const { initializeWebshareProxies } = await import('@/lib/webshare');
 
   const proxies = await initializeWebshareProxies();
-  console.log({ proxies });
+  console.log(`[webshare loaded] ${proxies.length} proxies`)
+
+  const { config } = await import('@/config')
+  console.log(`[tavily loaded] ${config.tavily.apiKeys.length} keys`)
 }
