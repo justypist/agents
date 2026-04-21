@@ -15,12 +15,14 @@ cp .env.example .env
 docker compose -f compose.prod.yaml up -d
 ```
 
+生产镜像启动时会自动执行数据库迁移。
+
 ## API
 
 当前聊天页面路由：`/{agentId}/{sessionId}`
 
 - 访问 `/` 会先跳转到 `/default`
-- 访问 `/{agentId}` 会先调用 `POST /api/{agentId}/sessions`，再跳转到 `/{agentId}/{sessionId}`
+- 访问 `/{agentId}` 会在请求时创建新 session，再跳转到 `/{agentId}/{sessionId}`
 
 ### Create Session
 
