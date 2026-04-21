@@ -2,7 +2,7 @@ import { ToolLoopAgent, stepCountIs } from 'ai';
 
 import { options } from '@/lib/ai';
 import { currentDateTime } from '@/tools/current-date-time';
-import { webSearch } from '@/tools/openai/web-search';
+import { tavilySearch } from '@/tools/tavily';
 
 export const defaultAgentInstructions = [
   '你是一个通用中文 agent，负责理解用户目标并给出直接、可执行的帮助。',
@@ -18,7 +18,7 @@ export const agent = new ToolLoopAgent({
   stopWhen: [stepCountIs(128)],
   tools: {
     currentDateTime,
-    webSearch,
+    tavilySearch,
   },
   toolChoice: 'auto',
 });
