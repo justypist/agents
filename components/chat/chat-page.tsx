@@ -2,6 +2,7 @@
 
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport, isToolUIPart, type UIMessage } from 'ai';
+import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { ChatComposer } from '@/components/chat/composer/chat-composer';
@@ -23,9 +24,11 @@ export function ChatPage({
   initialMessages,
   agentTitle,
 }: ChatPageProps) {
+  const router = useRouter();
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const [input, setInput] = useState('');
+  const [isCreatingSession, setIsCreatingSession] = useState(false);
   const [toolTimings, setToolTimings] = useState<ToolTimingMap>({});
   const [expandedStates, setExpandedStates] = useState<ExpandedStateMap>({});
   const [now, setNow] = useState<number>(() => Date.now());
@@ -217,9 +220,45 @@ export function ChatPage({
     }));
   };
 
+  const handleCreateSession = async (): Promise<void> => {
+    if (isCreatingSession) {
+      return;
+    }
+
+    setIsCreatingSession(true);
+
+    try {
+      const response = await fetch(`/api/${agentId}/sessions`, {
+        method: 'POST',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to create session');
+      }
+
+      const data: { chatPath?: string } = await response.json();
+
+      if (typeof data.chatPath !== 'string' || data.chatPath.length === 0) {
+        throw new Error('Missing chatPath');
+      }
+
+      router.push(data.chatPath);
+    } catch {
+      window.alert('新建会话失败，请稍后重试。');
+      setIsCreatingSession(false);
+    }
+  };
+
   return (
     <main className="flex min-h-screen flex-col bg-background text-foreground">
-      <ChatHeader status={status} title={agentTitle} />
+      <ChatHeader
+        status={status}
+        title={agentTitle}
+        isCreatingSession={isCreatingSession}
+        onCreateSession={() => {
+          void handleCreateSession();
+        }}
+      />
 
       <div className="flex-1 overflow-y-auto px-4 py-6 sm:px-6">
         <div className="mx-auto flex w-full max-w-4xl flex-col gap-4">
