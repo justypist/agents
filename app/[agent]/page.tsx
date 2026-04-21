@@ -1,6 +1,6 @@
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 
-import { ChatPage } from '@/components/chat/chat-page';
+import { createChatSession } from '@/lib/chat-sessions';
 import { getAgentByRouteSegment, getRouteAgents } from '@/lib/agent-registry';
 
 type AgentPageProps = {
@@ -29,10 +29,7 @@ export default async function AgentPage({ params }: AgentPageProps) {
     notFound();
   }
 
-  return (
-    <ChatPage
-      agentId={resolvedAgent.id}
-      agentTitle={resolvedAgent.displayName}
-    />
-  );
+  const sessionId = await createChatSession(resolvedAgent.id);
+
+  redirect(`/${resolvedAgent.routeSegment}/${sessionId}`);
 }

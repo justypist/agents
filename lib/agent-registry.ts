@@ -3,7 +3,7 @@ import 'server-only';
 import { readdir } from 'node:fs/promises';
 import path from 'node:path';
 
-import type { ModelMessage } from 'ai';
+import type { ModelMessage, ToolSet } from 'ai';
 
 export type AgentStreamInput = {
   messages: ModelMessage[];
@@ -11,6 +11,7 @@ export type AgentStreamInput = {
 };
 
 type StreamableAgent = {
+  tools?: ToolSet;
   stream: (input: AgentStreamInput) => Promise<{
     toUIMessageStreamResponse: (options?: Record<string, unknown>) => Response;
   }>;
@@ -92,10 +93,6 @@ async function loadRegistry(): Promise<AgentRegistry> {
 
     agentsById.set(agent.id, agent);
 
-    if (agent.id === DEFAULT_AGENT_ID) {
-      continue;
-    }
-
     if (agent.routeSegment == null) {
       throw new Error(`Agent "${agent.id}" is missing routeSegment.`);
     }
@@ -125,8 +122,7 @@ async function loadAgent(moduleName: string): Promise<RegisteredAgent> {
     throw new Error(`Agent module "${moduleName}" is missing agent export.`);
   }
 
-  const routeSegment =
-    moduleName === DEFAULT_AGENT_ID ? undefined : moduleName;
+  const routeSegment = moduleName;
 
   if (routeSegment != null && !isValidRouteSegment(routeSegment)) {
     throw new Error(

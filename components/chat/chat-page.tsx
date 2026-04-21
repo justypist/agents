@@ -12,10 +12,17 @@ import type { ExpandedStateMap, ToolTimingMap } from '@/components/chat/types';
 
 type ChatPageProps = {
   agentId: string;
+  sessionId: string;
+  initialMessages: UIMessage[];
   agentTitle: string;
 };
 
-export function ChatPage({ agentId, agentTitle }: ChatPageProps) {
+export function ChatPage({
+  agentId,
+  sessionId,
+  initialMessages,
+  agentTitle,
+}: ChatPageProps) {
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const [input, setInput] = useState('');
@@ -26,8 +33,10 @@ export function ChatPage({ agentId, agentTitle }: ChatPageProps) {
   const stopRequestedRef = useRef(false);
   const { messages, sendMessage, setMessages, status, stop, error, clearError } =
     useChat({
+      id: sessionId,
+      messages: initialMessages,
       transport: new DefaultChatTransport({
-        api: `/api/${agentId}`,
+        api: `/api/${agentId}/${sessionId}`,
       }),
     });
   const previousStatusRef = useRef(status);
