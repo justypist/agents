@@ -1,5 +1,6 @@
 import type { UIMessage } from 'ai';
 import type { RefObject } from 'react';
+import { memo } from 'react';
 
 import { ChatEmptyState } from './chat-empty-state';
 import { ChatMessageItem } from './chat-message-item';
@@ -16,7 +17,7 @@ type ChatMessageListProps = {
   onToggleExpanded: (key: string, currentExpanded: boolean) => void;
 };
 
-export function ChatMessageList({
+export const ChatMessageList = memo(function ChatMessageList({
   messages,
   expandedStates,
   toolTimings,
@@ -43,5 +44,20 @@ export function ChatMessageList({
       {shouldShowPendingReply ? <PendingReply status={status} /> : null}
       <div ref={messagesEndRef} />
     </>
+  );
+}, areChatMessageListPropsEqual);
+
+function areChatMessageListPropsEqual(
+  previous: ChatMessageListProps,
+  next: ChatMessageListProps,
+): boolean {
+  return (
+    previous.messages === next.messages &&
+    previous.expandedStates === next.expandedStates &&
+    previous.toolTimings === next.toolTimings &&
+    previous.status === next.status &&
+    previous.shouldShowPendingReply === next.shouldShowPendingReply &&
+    previous.messagesEndRef === next.messagesEndRef &&
+    previous.onToggleExpanded === next.onToggleExpanded
   );
 }

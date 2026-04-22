@@ -36,5 +36,6 @@ export const config = {
     accessKey: process.env.OSS_ACCESS_KEY?.trim() || 'xxx',
     secretKey: process.env.OSS_SECRET_KEY?.trim() || 'xxx',
     bucket: process.env.OSS_BUCKET?.trim() || 'agents',
+    region: process.env.OSS_REGION?.trim() || 'auto',
   }
 };

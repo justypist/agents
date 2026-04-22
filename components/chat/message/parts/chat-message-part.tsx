@@ -47,6 +47,20 @@ export const ChatMessagePart = memo(function ChatMessagePart({
     return <TextPart text={part.text} state={part.state} />;
   }
 
+  if (part.type === 'file') {
+    return (
+      <a
+        href={part.url}
+        target="_blank"
+        rel="noreferrer"
+        className="inline-flex items-center gap-2 border border-border px-3 py-2 text-sm text-foreground transition-colors hover:bg-muted"
+      >
+        <span className="truncate">{part.filename ?? part.mediaType}</span>
+        <span className="text-xs text-muted-foreground">{part.mediaType}</span>
+      </a>
+    );
+  }
+
   if (!isToolUIPart(part)) {
     return null;
   }
