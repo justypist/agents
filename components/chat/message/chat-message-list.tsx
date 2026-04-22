@@ -10,7 +10,6 @@ type ChatMessageListProps = {
   messages: UIMessage[];
   expandedStates: ExpandedStateMap;
   toolTimings: ToolTimingMap;
-  now: number;
   status: string;
   shouldShowPendingReply: boolean;
   messagesEndRef: RefObject<HTMLDivElement | null>;
@@ -21,7 +20,6 @@ export function ChatMessageList({
   messages,
   expandedStates,
   toolTimings,
-  now,
   status,
   shouldShowPendingReply,
   messagesEndRef,
@@ -39,7 +37,6 @@ export function ChatMessageList({
           message={message}
           expandedStates={expandedStates}
           toolTimings={toolTimings}
-          now={now}
           onToggleExpanded={onToggleExpanded}
         />
       ))}

@@ -1,3 +1,5 @@
+import { memo, useEffect, useState } from 'react';
+
 import {
   formatDuration,
   getToolDetailLines,
@@ -16,12 +18,11 @@ type ToolPartProps = {
   output?: unknown;
   errorText?: string;
   timing?: ToolTiming;
-  now: number;
   expanded: boolean;
   onToggle: () => void;
 };
 
-export function ToolPart({
+export const ToolPart = memo(function ToolPart({
   toolCallId,
   toolName,
   state,
@@ -30,10 +31,10 @@ export function ToolPart({
   output,
   errorText,
   timing,
-  now,
   expanded,
   onToggle,
 }: ToolPartProps) {
+  const [now, setNow] = useState<number>(() => Date.now());
   const stateMeta = getToolStateMeta(state, preliminary);
   const active = isToolActive(state, preliminary);
   const allLines = getToolDetailLines({
@@ -56,6 +57,24 @@ export function ToolPart({
     timing == null
       ? undefined
       : (timing.finishedAt ?? now) - timing.startedAt;
+
+  useEffect(() => {
+    if (!active || timing?.finishedAt != null) {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      if (document.visibilityState !== 'visible') {
+        return;
+      }
+
+      setNow(Date.now());
+    }, 120);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [active, timing?.finishedAt, timing?.startedAt]);
 
   return (
     <section key={toolCallId} className="space-y-1 py-0.5 font-mono text-[13px] leading-6">
@@ -93,4 +112,4 @@ export function ToolPart({
       ) : null}
     </section>
   );
-}
+});

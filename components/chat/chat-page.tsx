@@ -3,7 +3,14 @@
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport, isToolUIPart, type UIMessage } from 'ai';
 import { useRouter } from 'next/navigation';
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 
 import { ChatComposer } from '@/components/chat/composer/chat-composer';
 import { isToolActive, isToolFinished } from '@/components/chat/helpers';
@@ -35,6 +42,7 @@ export function ChatPage({
   const messagesContentRef = useRef<HTMLDivElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const shouldAutoScrollRef = useRef(true);
+  const documentVisibleRef = useRef(true);
   const inputDraftRef = useRef('');
   const [input, setInput] = useState('');
   const [inputHistory, setInputHistory] = useState<string[]>(() =>
@@ -44,13 +52,13 @@ export function ChatPage({
   const [isCreatingSession, setIsCreatingSession] = useState(false);
   const [toolTimings, setToolTimings] = useState<ToolTimingMap>({});
   const [expandedStates, setExpandedStates] = useState<ExpandedStateMap>({});
-  const [now, setNow] = useState<number>(() => Date.now());
   const [canContinue, setCanContinue] = useState(false);
   const stopRequestedRef = useRef(false);
   const { messages, sendMessage, setMessages, status, stop, error, clearError } =
     useChat({
       id: sessionId,
       messages: initialMessages,
+      experimental_throttle: 50,
       transport: new DefaultChatTransport({
         api: `/api/${agentId}/${sessionId}`,
       }),
@@ -182,7 +190,7 @@ export function ChatPage({
   };
 
   useLayoutEffect(() => {
-    if (!shouldAutoScrollRef.current) {
+    if (!shouldAutoScrollRef.current || !documentVisibleRef.current) {
       return;
     }
 
@@ -197,7 +205,7 @@ export function ChatPage({
     }
 
     const observer = new ResizeObserver(() => {
-      if (!shouldAutoScrollRef.current) {
+      if (!shouldAutoScrollRef.current || !documentVisibleRef.current) {
         return;
       }
 
@@ -208,6 +216,24 @@ export function ChatPage({
 
     return () => {
       observer.disconnect();
+    };
+  }, []);
+
+  useEffect(() => {
+    documentVisibleRef.current = document.visibilityState === 'visible';
+
+    const handleVisibilityChange = (): void => {
+      documentVisibleRef.current = document.visibilityState === 'visible';
+
+      if (documentVisibleRef.current && shouldAutoScrollRef.current) {
+        scrollToBottom();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, []);
 
@@ -315,21 +341,6 @@ export function ChatPage({
     });
   }, [messages]);
 
-  const hasActiveToolCall = useMemo(() => {
-    return messages.some(message =>
-      message.parts.some(part => {
-        if (!isToolUIPart(part)) {
-          return false;
-        }
-
-        return isToolActive(
-          part.state,
-          'preliminary' in part ? part.preliminary : undefined,
-        );
-      }),
-    );
-  }, [messages]);
-
   const handleStop = (): void => {
     setCanContinue(true);
     stopRequestedRef.current = true;
@@ -348,26 +359,12 @@ export function ChatPage({
     });
   };
 
-  useEffect(() => {
-    if (!hasActiveToolCall) {
-      return;
-    }
-
-    const timer = window.setInterval(() => {
-      setNow(Date.now());
-    }, 120);
-
-    return () => {
-      window.clearInterval(timer);
-    };
-  }, [hasActiveToolCall]);
-
-  const toggleExpanded = (key: string, currentExpanded: boolean): void => {
+  const toggleExpanded = useCallback((key: string, currentExpanded: boolean): void => {
     setExpandedStates(previous => ({
       ...previous,
       [key]: !currentExpanded,
     }));
-  };
+  }, []);
 
   const handleCreateSession = async (): Promise<void> => {
     if (isCreatingSession) {
@@ -422,7 +419,6 @@ export function ChatPage({
             messages={visibleMessages}
             expandedStates={expandedStates}
             toolTimings={toolTimings}
-            now={now}
             status={status}
             shouldShowPendingReply={shouldShowPendingReply}
             messagesEndRef={messagesEndRef}

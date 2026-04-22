@@ -1,14 +1,16 @@
+import { memo } from 'react';
 import { Streamdown } from 'streamdown';
 
 type TextPartProps = {
   text: string;
+  state?: 'streaming' | 'done';
 };
 
-export function TextPart({ text }: TextPartProps) {
+export const TextPart = memo(function TextPart({ text, state }: TextPartProps) {
   return (
     <Streamdown
       dir="auto"
-      mode="streaming"
+      mode={state === 'streaming' ? 'streaming' : 'static'}
       className={[
         'text-foreground',
         '[&>blockquote]:border-l',
@@ -48,4 +50,4 @@ export function TextPart({ text }: TextPartProps) {
       {text}
     </Streamdown>
   );
-}
+});

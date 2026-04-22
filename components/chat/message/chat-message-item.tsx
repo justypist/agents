@@ -1,4 +1,5 @@
 import type { UIMessage } from 'ai';
+import { memo } from 'react';
 
 import { ChatMessagePart } from './parts/chat-message-part';
 import type { ExpandedStateMap, ToolTimingMap } from '../types';
@@ -7,15 +8,13 @@ type ChatMessageItemProps = {
   message: UIMessage;
   expandedStates: ExpandedStateMap;
   toolTimings: ToolTimingMap;
-  now: number;
   onToggleExpanded: (key: string, currentExpanded: boolean) => void;
 };
 
-export function ChatMessageItem({
+export const ChatMessageItem = memo(function ChatMessageItem({
   message,
   expandedStates,
   toolTimings,
-  now,
   onToggleExpanded,
 }: ChatMessageItemProps) {
   return (
@@ -32,11 +31,22 @@ export function ChatMessageItem({
             index={index}
             expandedStates={expandedStates}
             toolTimings={toolTimings}
-            now={now}
             onToggleExpanded={onToggleExpanded}
           />
         ))}
       </div>
     </article>
+  );
+}, areChatMessageItemPropsEqual);
+
+function areChatMessageItemPropsEqual(
+  previous: ChatMessageItemProps,
+  next: ChatMessageItemProps,
+): boolean {
+  return (
+    previous.message === next.message &&
+    previous.expandedStates === next.expandedStates &&
+    previous.toolTimings === next.toolTimings &&
+    previous.onToggleExpanded === next.onToggleExpanded
   );
 }

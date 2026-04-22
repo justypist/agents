@@ -1,4 +1,5 @@
 import { getToolName, isToolUIPart, type UIMessage } from 'ai';
+import { memo } from 'react';
 
 import { getReasoningText, isToolActive } from '../../helpers';
 import type { ExpandedStateMap, ToolTimingMap } from '../../types';
@@ -12,17 +13,15 @@ type ChatMessagePartProps = {
   index: number;
   expandedStates: ExpandedStateMap;
   toolTimings: ToolTimingMap;
-  now: number;
   onToggleExpanded: (key: string, currentExpanded: boolean) => void;
 };
 
-export function ChatMessagePart({
+export const ChatMessagePart = memo(function ChatMessagePart({
   messageId,
   part,
   index,
   expandedStates,
   toolTimings,
-  now,
   onToggleExpanded,
 }: ChatMessagePartProps) {
   if (part.type === 'reasoning') {
@@ -45,7 +44,7 @@ export function ChatMessagePart({
   }
 
   if (part.type === 'text') {
-    return <TextPart text={part.text} />;
+    return <TextPart text={part.text} state={part.state} />;
   }
 
   if (!isToolUIPart(part)) {
@@ -66,9 +65,22 @@ export function ChatMessagePart({
       output={'output' in part ? part.output : undefined}
       errorText={'errorText' in part ? part.errorText : undefined}
       timing={toolTimings[part.toolCallId]}
-      now={now}
       expanded={expanded}
       onToggle={() => onToggleExpanded(part.toolCallId, expanded)}
     />
+  );
+}, areChatMessagePartPropsEqual);
+
+function areChatMessagePartPropsEqual(
+  previous: ChatMessagePartProps,
+  next: ChatMessagePartProps,
+): boolean {
+  return (
+    previous.messageId === next.messageId &&
+    previous.part === next.part &&
+    previous.index === next.index &&
+    previous.expandedStates === next.expandedStates &&
+    previous.toolTimings === next.toolTimings &&
+    previous.onToggleExpanded === next.onToggleExpanded
   );
 }
