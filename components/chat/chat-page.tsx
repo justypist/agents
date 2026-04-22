@@ -99,14 +99,17 @@ export function ChatPage({
       distanceFromBottom <= AUTO_SCROLL_ENTER_THRESHOLD;
   };
 
-  const scrollToBottom = (): void => {
+  const scrollToBottom = (behavior: ScrollBehavior = 'auto'): void => {
     const container = messagesContainerRef.current;
 
     if (container == null) {
       return;
     }
 
-    container.scrollTop = container.scrollHeight;
+    container.scrollTo({
+      top: container.scrollHeight,
+      behavior,
+    });
     shouldAutoScrollRef.current = true;
   };
 
@@ -138,6 +141,7 @@ export function ChatPage({
     inputDraftRef.current = '';
     setInputHistory(previous => appendInputHistory(previous, trimmedInput));
     setInputHistoryIndex(null);
+    scrollToBottom('smooth');
     void sendMessage({ text: trimmedInput });
     setInput('');
   };
@@ -239,6 +243,12 @@ export function ChatPage({
 
   useEffect(() => {
     inputRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    requestAnimationFrame(() => {
+      scrollToBottom('smooth');
+    });
   }, []);
 
   useEffect(() => {
