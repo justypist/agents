@@ -7,6 +7,7 @@ type ChatComposerProps = {
   canContinue: boolean;
   inputRef: RefObject<HTMLTextAreaElement | null>;
   onInputChange: (value: string) => void;
+  onHistoryNavigate: (direction: 'up' | 'down') => void;
   onSubmit: () => void;
   onContinue: () => void;
   onStop: () => void;
@@ -19,6 +20,7 @@ export function ChatComposer({
   canContinue,
   inputRef,
   onInputChange,
+  onHistoryNavigate,
   onSubmit,
   onContinue,
   onStop,
@@ -44,6 +46,19 @@ export function ChatComposer({
               value={input}
               onChange={event => onInputChange(event.target.value)}
               onKeyDown={event => {
+                if (
+                  !event.nativeEvent.isComposing &&
+                  !event.shiftKey &&
+                  !event.altKey &&
+                  !event.ctrlKey &&
+                  !event.metaKey &&
+                  shouldHandleHistoryNavigation(event.currentTarget, event.key)
+                ) {
+                  event.preventDefault();
+                  onHistoryNavigate(event.key === 'ArrowUp' ? 'up' : 'down');
+                  return;
+                }
+
                 if (
                   event.key !== 'Enter' ||
                   event.shiftKey ||
@@ -92,4 +107,25 @@ export function ChatComposer({
       </form>
     </>
   );
+}
+
+function shouldHandleHistoryNavigation(
+  textarea: HTMLTextAreaElement,
+  key: string,
+): key is 'ArrowUp' | 'ArrowDown' {
+  if (key !== 'ArrowUp' && key !== 'ArrowDown') {
+    return false;
+  }
+
+  if (textarea.selectionStart !== textarea.selectionEnd) {
+    return false;
+  }
+
+  const caret = textarea.selectionStart;
+
+  if (key === 'ArrowUp') {
+    return !textarea.value.slice(0, caret).includes('\n');
+  }
+
+  return !textarea.value.slice(caret).includes('\n');
 }
