@@ -71,7 +71,6 @@ export function ChatComposer({
                 onSubmit();
               }}
               placeholder="输入你的问题..."
-              disabled={isLoading}
             />
           </label>
 

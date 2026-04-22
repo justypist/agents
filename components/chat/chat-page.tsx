@@ -117,6 +117,10 @@ export function ChatPage({
   };
 
   const submitMessage = (): void => {
+    if (isLoading) {
+      return;
+    }
+
     const trimmedInput = input.trim();
     if (!trimmedInput) {
       return;
