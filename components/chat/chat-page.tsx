@@ -1,7 +1,12 @@
 'use client';
 
 import { useChat } from '@ai-sdk/react';
-import { DefaultChatTransport, isToolUIPart, type UIMessage } from 'ai';
+import {
+  DefaultChatTransport,
+  isToolUIPart,
+  type FileUIPart,
+  type UIMessage,
+} from 'ai';
 import { useRouter } from 'next/navigation';
 import {
   useCallback,
@@ -17,6 +22,8 @@ import { isToolActive, isToolFinished } from '@/components/chat/helpers';
 import { ChatHeader } from '@/components/chat/layout/chat-header';
 import { ChatMessageList } from '@/components/chat/message/chat-message-list';
 import type { ExpandedStateMap, ToolTimingMap } from '@/components/chat/types';
+import { UploadCanceledError, uploadFileToOss } from '@/lib/upload-client';
+import type { UploadedFileAsset } from '@/lib/upload-types';
 
 type ChatPageProps = {
   agentId: string;
@@ -27,8 +34,24 @@ type ChatPageProps = {
 
 const AUTO_SCROLL_ENTER_THRESHOLD = 24;
 const AUTO_SCROLL_EXIT_THRESHOLD = 80;
-const INPUT_HISTORY_STORAGE_KEY = 'agents:chat-input-history';
-const MAX_INPUT_HISTORY = 128;
+
+type AttachmentStatus =
+  | 'hashing'
+  | 'preparing'
+  | 'uploading'
+  | 'completing'
+  | 'uploaded'
+  | 'error';
+
+type PendingAttachment = {
+  id: string;
+  file: File;
+  status: AttachmentStatus;
+  progress: number;
+  errorText?: string;
+  hash?: string;
+  asset?: UploadedFileAsset;
+};
 
 export function ChatPage({
   agentId,
@@ -43,16 +66,12 @@ export function ChatPage({
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const shouldAutoScrollRef = useRef(true);
   const documentVisibleRef = useRef(true);
-  const inputDraftRef = useRef('');
-  const [input, setInput] = useState('');
-  const [inputHistory, setInputHistory] = useState<string[]>(() =>
-    readStoredInputHistory(),
-  );
-  const [inputHistoryIndex, setInputHistoryIndex] = useState<number | null>(null);
+  const canceledUploadIdsRef = useRef<Set<string>>(new Set());
   const [isCreatingSession, setIsCreatingSession] = useState(false);
   const [toolTimings, setToolTimings] = useState<ToolTimingMap>({});
   const [expandedStates, setExpandedStates] = useState<ExpandedStateMap>({});
   const [canContinue, setCanContinue] = useState(false);
+  const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const stopRequestedRef = useRef(false);
   const { messages, sendMessage, setMessages, status, stop, error, clearError } =
     useChat({
@@ -67,6 +86,38 @@ export function ChatPage({
 
   const isLoading = status === 'submitted' || status === 'streaming';
   const canContinueResponse = canContinue || error != null;
+  const isUploadingFiles = attachments.some(
+    attachment =>
+      attachment.status === 'hashing' ||
+      attachment.status === 'preparing' ||
+      attachment.status === 'uploading' ||
+      attachment.status === 'completing',
+  );
+  const hasAttachmentErrors = attachments.some(
+    attachment => attachment.status === 'error',
+  );
+  const uploadedAttachments = useMemo(
+    () =>
+      attachments.filter(
+        (attachment): attachment is PendingAttachment & { asset: UploadedFileAsset } =>
+          attachment.status === 'uploaded' && attachment.asset != null,
+      ),
+    [attachments],
+  );
+  const canSubmitMessage = !isLoading && !isUploadingFiles && !hasAttachmentErrors;
+  const composerAttachments = useMemo(
+    () =>
+      attachments.map(attachment => ({
+        id: attachment.id,
+        name: attachment.file.name,
+        size: attachment.file.size,
+        mimeType: attachment.asset?.mimeType ?? normalizeMimeType(attachment.file.type),
+        status: attachment.status,
+        progress: attachment.progress,
+        errorText: attachment.errorText,
+      })),
+    [attachments],
+  );
   const visibleMessages = useMemo(
     () =>
       messages.filter(
@@ -113,85 +164,156 @@ export function ChatPage({
     shouldAutoScrollRef.current = true;
   };
 
-  const moveCaretToInputEnd = (): void => {
-    requestAnimationFrame(() => {
-      const textarea = inputRef.current;
-
-      if (textarea == null) {
-        return;
-      }
-
-      const end = textarea.value.length;
-      textarea.focus();
-      textarea.setSelectionRange(end, end);
-    });
-  };
-
-  const submitMessage = (): void => {
-    if (isLoading) {
+  const submitMessage = (input: string): void => {
+    if (!canSubmitMessage) {
       return;
     }
 
     const trimmedInput = input.trim();
-    if (!trimmedInput) {
-      return;
-    }
+    const files: FileUIPart[] = uploadedAttachments.map(attachment => ({
+      type: 'file',
+      url: attachment.asset.url,
+      mediaType: attachment.asset.mimeType,
+      filename: attachment.file.name,
+    }));
 
     setCanContinue(false);
-    inputDraftRef.current = '';
-    setInputHistory(previous => appendInputHistory(previous, trimmedInput));
-    setInputHistoryIndex(null);
     scrollToBottom('smooth');
-    void sendMessage({ text: trimmedInput });
-    setInput('');
+    void sendMessage(
+      files.length > 0 && trimmedInput.length > 0
+        ? { text: trimmedInput, files }
+          : files.length > 0
+            ? { files }
+            : { text: trimmedInput },
+    );
+    canceledUploadIdsRef.current.clear();
+    setAttachments([]);
   };
 
-  const handleInputChange = (value: string): void => {
-    if (inputHistoryIndex != null) {
-      inputDraftRef.current = value;
-      setInputHistoryIndex(null);
-    }
+  const updateAttachment = useCallback(
+    (
+      attachmentId: string,
+      updater: (attachment: PendingAttachment) => PendingAttachment,
+    ): void => {
+      setAttachments(previousAttachments =>
+        previousAttachments.map(attachment =>
+          attachment.id === attachmentId ? updater(attachment) : attachment,
+        ),
+      );
+    },
+    [],
+  );
 
-    setInput(value);
-  };
+  const uploadAttachment = useCallback(
+    (attachmentId: string, file: File): void => {
+      void (async () => {
+        try {
+          const result = await uploadFileToOss(file, {
+            isCanceled: () => canceledUploadIdsRef.current.has(attachmentId),
+            onStateChange: state => {
+              updateAttachment(attachmentId, attachment => ({
+                ...attachment,
+                status: state,
+                errorText: undefined,
+              }));
+            },
+            onHashProgress: progress => {
+              updateAttachment(attachmentId, attachment => ({
+                ...attachment,
+                status: 'hashing',
+                progress,
+              }));
+            },
+            onUploadProgress: progress => {
+              updateAttachment(attachmentId, attachment => ({
+                ...attachment,
+                status: 'uploading',
+                progress,
+              }));
+            },
+          });
 
-  const handleHistoryNavigate = (direction: 'up' | 'down'): void => {
-    if (inputHistory.length === 0) {
-      return;
-    }
+          if (canceledUploadIdsRef.current.has(attachmentId)) {
+            return;
+          }
 
-    if (direction === 'up') {
-      const nextIndex =
-        inputHistoryIndex == null
-          ? inputHistory.length - 1
-          : Math.max(inputHistoryIndex - 1, 0);
+          updateAttachment(attachmentId, attachment => ({
+            ...attachment,
+            status: 'uploaded',
+            progress: 1,
+            hash: result.hash,
+            asset: result.asset,
+            errorText: undefined,
+          }));
+        } catch (error) {
+          if (
+            error instanceof UploadCanceledError ||
+            canceledUploadIdsRef.current.has(attachmentId)
+          ) {
+            return;
+          }
 
-      if (inputHistoryIndex == null) {
-        inputDraftRef.current = input;
+          updateAttachment(attachmentId, attachment => ({
+            ...attachment,
+            status: 'error',
+            errorText: toUploadErrorMessage(error),
+          }));
+        }
+      })();
+    },
+    [updateAttachment],
+  );
+
+  const handleFilesSelect = useCallback(
+    (fileList: FileList | null): void => {
+      if (fileList == null || fileList.length === 0) {
+        return;
       }
 
-      setInputHistoryIndex(nextIndex);
-      setInput(inputHistory[nextIndex]);
-      moveCaretToInputEnd();
-      return;
-    }
+      const nextFiles = Array.from(fileList);
+      const newAttachments = nextFiles
+        .filter(
+          file =>
+            !attachments.some(attachment => isSameLocalFile(attachment.file, file)),
+        )
+        .reduce<PendingAttachment[]>((result, file) => {
+          if (result.some(attachment => isSameLocalFile(attachment.file, file))) {
+            return result;
+          }
 
-    if (inputHistoryIndex == null) {
-      return;
-    }
+          result.push({
+            id: crypto.randomUUID(),
+            file,
+            status: 'hashing',
+            progress: 0,
+          });
 
-    if (inputHistoryIndex === inputHistory.length - 1) {
-      setInputHistoryIndex(null);
-      setInput(inputDraftRef.current);
-      moveCaretToInputEnd();
-      return;
-    }
+          return result;
+        }, []);
 
-    const nextIndex = inputHistoryIndex + 1;
-    setInputHistoryIndex(nextIndex);
-    setInput(inputHistory[nextIndex]);
-    moveCaretToInputEnd();
-  };
+      if (newAttachments.length === 0) {
+        return;
+      }
+
+      for (const attachment of newAttachments) {
+        canceledUploadIdsRef.current.delete(attachment.id);
+      }
+
+      setAttachments(previousAttachments => [...previousAttachments, ...newAttachments]);
+
+      for (const attachment of newAttachments) {
+        uploadAttachment(attachment.id, attachment.file);
+      }
+    },
+    [attachments, uploadAttachment],
+  );
+
+  const handleRemoveAttachment = useCallback((attachmentId: string): void => {
+    canceledUploadIdsRef.current.add(attachmentId);
+    setAttachments(previousAttachments =>
+      previousAttachments.filter(attachment => attachment.id !== attachmentId),
+    );
+  }, []);
 
   useLayoutEffect(() => {
     if (!shouldAutoScrollRef.current || !documentVisibleRef.current) {
@@ -250,17 +372,6 @@ export function ChatPage({
       scrollToBottom('smooth');
     });
   }, []);
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(
-        INPUT_HISTORY_STORAGE_KEY,
-        JSON.stringify(inputHistory),
-      );
-    } catch {
-      // Ignore storage failures so input remains usable in restricted environments.
-    }
-  }, [inputHistory]);
 
   useEffect(() => {
     const previousStatus = previousStatusRef.current;
@@ -440,13 +551,15 @@ export function ChatPage({
       <div className="border-t border-border px-4 py-4 sm:px-6">
         <div className="mx-auto w-full max-w-4xl">
           <ChatComposer
-            input={input}
             isLoading={isLoading}
+            isUploadingFiles={isUploadingFiles}
             hasError={error != null}
             canContinue={canContinueResponse}
+            canSubmit={canSubmitMessage}
+            attachments={composerAttachments}
             inputRef={inputRef}
-            onInputChange={handleInputChange}
-            onHistoryNavigate={handleHistoryNavigate}
+            onFilesSelect={handleFilesSelect}
+            onRemoveAttachment={handleRemoveAttachment}
             onSubmit={submitMessage}
             onContinue={handleContinue}
             onStop={handleStop}
@@ -536,36 +649,23 @@ function normalizeInterruptedMessages(
   return messages;
 }
 
-function readStoredInputHistory(): string[] {
-  if (typeof window === 'undefined') {
-    return [];
-  }
-
-  try {
-    const stored = window.localStorage.getItem(INPUT_HISTORY_STORAGE_KEY);
-
-    if (stored == null) {
-      return [];
-    }
-
-    const parsed: unknown = JSON.parse(stored);
-
-    if (!Array.isArray(parsed)) {
-      return [];
-    }
-
-    return parsed
-      .filter((entry): entry is string => typeof entry === 'string')
-      .slice(-MAX_INPUT_HISTORY);
-  } catch {
-    return [];
-  }
+function isSameLocalFile(left: File, right: File): boolean {
+  return (
+    left.name === right.name &&
+    left.size === right.size &&
+    left.lastModified === right.lastModified
+  );
 }
 
-function appendInputHistory(history: string[], input: string): string[] {
-  if (history[history.length - 1] === input) {
-    return history;
+function toUploadErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.length > 0) {
+    return error.message;
   }
 
-  return [...history, input].slice(-MAX_INPUT_HISTORY);
+  return '上传失败';
+}
+
+function normalizeMimeType(value: string): string {
+  const trimmedValue = value.trim();
+  return trimmedValue.length > 0 ? trimmedValue : 'application/octet-stream';
 }

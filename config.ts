@@ -31,4 +31,11 @@ export const config = {
     apiKey: process.env.WEBSHARE_API_KEY?.trim() || 'xxx',
     proxies: [] as string[],
   },
+  oss: {
+    baseUrl: process.env.OSS_BASE_URL?.trim() || 'https://oss.example.cc',
+    accessKey: process.env.OSS_ACCESS_KEY?.trim() || 'xxx',
+    secretKey: process.env.OSS_SECRET_KEY?.trim() || 'xxx',
+    bucket: process.env.OSS_BUCKET?.trim() || 'agents',
+    region: process.env.OSS_REGION?.trim() || 'auto',
+  }
 };
