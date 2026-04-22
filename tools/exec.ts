@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 
 import { jsonSchema, tool } from 'ai';
@@ -7,6 +8,13 @@ const WORKSPACE_ROOT = process.cwd();
 const DEFAULT_TIMEOUT_MS = 20_000;
 const MAX_TIMEOUT_MS = 60_000;
 const MAX_OUTPUT_CHARS = 12_000;
+const SHELL_CANDIDATES = [
+  process.env.SHELL,
+  '/bin/bash',
+  '/usr/bin/bash',
+  '/bin/sh',
+  '/usr/bin/sh',
+];
 
 type execInput = {
   command: string;
@@ -87,6 +95,20 @@ function normalizeTimeout(timeoutMs?: number): number {
   return Math.min(Math.max(Math.floor(timeoutMs), 1_000), MAX_TIMEOUT_MS);
 }
 
+function resolveShell(): string {
+  for (const candidate of SHELL_CANDIDATES) {
+    if (candidate == null || candidate.trim().length === 0) {
+      continue;
+    }
+
+    if (existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  throw new Error('未找到可用 shell，请确认系统存在 /bin/sh 或配置 SHELL 环境变量');
+}
+
 export const exec = tool({
   description:
     '在当前 workspace 内执行本地 shell 命令，适合读写文件、运行构建、调用 CLI；仅在确有必要时使用',
@@ -95,9 +117,10 @@ export const exec = tool({
     const command = normalizeCommand(input.command);
     const cwd = resolveWorkingDirectory(input.cwd);
     const timeoutMs = normalizeTimeout(input.timeoutMs);
+    const shell = resolveShell();
 
     return await new Promise<execResult>((resolve, reject) => {
-      const child = spawn('bash', ['-lc', command], {
+      const child = spawn(shell, ['-c', command], {
         cwd,
         env: process.env,
         stdio: ['ignore', 'pipe', 'pipe'],
