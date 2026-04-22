@@ -3,7 +3,7 @@
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport, isToolUIPart, type UIMessage } from 'ai';
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import { ChatComposer } from '@/components/chat/composer/chat-composer';
 import { isToolActive, isToolFinished } from '@/components/chat/helpers';
@@ -18,6 +18,9 @@ type ChatPageProps = {
   agentTitle: string;
 };
 
+const AUTO_SCROLL_ENTER_THRESHOLD = 24;
+const AUTO_SCROLL_EXIT_THRESHOLD = 80;
+
 export function ChatPage({
   agentId,
   sessionId,
@@ -26,7 +29,10 @@ export function ChatPage({
 }: ChatPageProps) {
   const router = useRouter();
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const messagesContainerRef = useRef<HTMLDivElement | null>(null);
+  const messagesContentRef = useRef<HTMLDivElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const shouldAutoScrollRef = useRef(true);
   const [input, setInput] = useState('');
   const [isCreatingSession, setIsCreatingSession] = useState(false);
   const [toolTimings, setToolTimings] = useState<ToolTimingMap>({});
@@ -58,6 +64,37 @@ export function ChatPage({
     isLoading &&
     (lastMessage == null || lastMessage.role !== 'assistant');
 
+  const updateAutoScrollState = (): void => {
+    const container = messagesContainerRef.current;
+
+    if (container == null) {
+      return;
+    }
+
+    const distanceFromBottom =
+      container.scrollHeight - container.scrollTop - container.clientHeight;
+
+    if (shouldAutoScrollRef.current) {
+      shouldAutoScrollRef.current =
+        distanceFromBottom <= AUTO_SCROLL_EXIT_THRESHOLD;
+      return;
+    }
+
+    shouldAutoScrollRef.current =
+      distanceFromBottom <= AUTO_SCROLL_ENTER_THRESHOLD;
+  };
+
+  const scrollToBottom = (): void => {
+    const container = messagesContainerRef.current;
+
+    if (container == null) {
+      return;
+    }
+
+    container.scrollTop = container.scrollHeight;
+    shouldAutoScrollRef.current = true;
+  };
+
   const submitMessage = (): void => {
     const trimmedInput = input.trim();
     if (!trimmedInput) {
@@ -69,9 +106,35 @@ export function ChatPage({
     setInput('');
   };
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  useLayoutEffect(() => {
+    if (!shouldAutoScrollRef.current) {
+      return;
+    }
+
+    scrollToBottom();
   }, [messages, status]);
+
+  useEffect(() => {
+    const content = messagesContentRef.current;
+
+    if (content == null) {
+      return;
+    }
+
+    const observer = new ResizeObserver(() => {
+      if (!shouldAutoScrollRef.current) {
+        return;
+      }
+
+      scrollToBottom();
+    });
+
+    observer.observe(content);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -260,8 +323,15 @@ export function ChatPage({
         }}
       />
 
-      <div className="flex-1 overflow-y-auto px-4 py-6 sm:px-6">
-        <div className="mx-auto flex w-full max-w-4xl flex-col gap-4">
+      <div
+        ref={messagesContainerRef}
+        className="flex-1 overflow-y-auto px-4 py-6 sm:px-6"
+        onScroll={updateAutoScrollState}
+      >
+        <div
+          ref={messagesContentRef}
+          className="mx-auto flex w-full max-w-4xl flex-col gap-4"
+        >
           <ChatMessageList
             messages={visibleMessages}
             expandedStates={expandedStates}
