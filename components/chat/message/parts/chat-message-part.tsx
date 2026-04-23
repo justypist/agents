@@ -3,6 +3,7 @@ import { memo } from 'react';
 
 import { getReasoningText, isToolActive } from '../../helpers';
 import type { ExpandedStateMap, ToolTimingMap } from '../../types';
+import { FilePart } from './file-part';
 import { ReasoningPart } from './reasoning-part';
 import { TextPart } from './text-part';
 import { ToolPart } from './tool-part';
@@ -48,17 +49,7 @@ export const ChatMessagePart = memo(function ChatMessagePart({
   }
 
   if (part.type === 'file') {
-    return (
-      <a
-        href={part.url}
-        target="_blank"
-        rel="noreferrer"
-        className="inline-flex items-center gap-2 border border-border px-3 py-2 text-sm text-foreground transition-colors hover:bg-muted"
-      >
-        <span className="truncate">{part.filename ?? part.mediaType}</span>
-        <span className="text-xs text-muted-foreground">{part.mediaType}</span>
-      </a>
-    );
+    return <FilePart part={part} />;
   }
 
   if (!isToolUIPart(part)) {
