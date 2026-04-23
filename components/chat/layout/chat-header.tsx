@@ -1,6 +1,6 @@
 'use client';
 
-import Link from 'next/link';
+import Link, { useLinkStatus } from 'next/link';
 
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 
@@ -33,13 +33,7 @@ export function ChatHeader({
     <div className="border-b border-border px-4 py-3">
       <div className="mx-auto flex w-full max-w-4xl items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <Link
-            href="/"
-            aria-label="返回首页"
-            className="flex h-8 w-8 items-center justify-center border border-border bg-background text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          >
-            ←
-          </Link>
+          <BackHomeLink />
 
           <div className="group/title flex items-center gap-2">
             <h1 className="text-sm font-medium tracking-[-0.01em]">{title}</h1>
@@ -75,5 +69,23 @@ export function ChatHeader({
         </div>
       </div>
     </div>
+  );
+}
+
+function BackHomeLink() {
+  const { pending } = useLinkStatus();
+
+  return (
+    <Link
+      href="/"
+      aria-label="返回首页"
+      className="group flex h-8 w-8 items-center justify-center border border-border bg-background text-sm text-muted-foreground transition-[background-color,border-color,color,transform,box-shadow] duration-150 hover:-translate-x-0.5 hover:border-border-strong hover:bg-muted hover:text-foreground hover:shadow-[inset_2px_0_0_0_var(--color-foreground)]"
+    >
+      {pending ? (
+        <LoadingSpinner className="h-3 w-3" />
+      ) : (
+        <span className="transition-transform duration-150 group-hover:-translate-x-0.5">←</span>
+      )}
+    </Link>
   );
 }
