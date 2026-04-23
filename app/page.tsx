@@ -1,5 +1,4 @@
-import Link from 'next/link';
-
+import { AgentLinkCard } from '@/components/home/agent-link-card';
 import { SessionHistory } from '@/components/home/session-history';
 import { getRouteAgents } from '@/lib/agent-registry';
 import { listHomeChatSessions } from '@/lib/chat-session';
@@ -28,25 +27,12 @@ export default async function Home() {
 
       <div className="mt-10 grid gap-4 sm:grid-cols-2">
         {agents.map(agent => (
-          <Link
+          <AgentLinkCard
             key={agent.id}
-            href={`/${agent.routeSegment}`}
-            className="group rounded-2xl border border-border bg-background p-5 transition hover:border-border-strong hover:bg-muted/50"
-          >
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h2 className="text-lg font-medium text-foreground">
-                  {agent.displayName}
-                </h2>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  路径：/{agent.routeSegment}
-                </p>
-              </div>
-              <span className="rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground transition group-hover:border-border-strong group-hover:text-foreground">
-                打开
-              </span>
-            </div>
-          </Link>
+            displayName={agent.displayName}
+            href={`/${agent.routeSegment!}`}
+            routeSegment={agent.routeSegment!}
+          />
         ))}
       </div>
 

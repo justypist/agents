@@ -3,6 +3,8 @@
 import type { RefObject } from 'react';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 
+import { LoadingSpinner } from '@/components/ui/loading-spinner';
+
 type ComposerAttachment = {
   id: string;
   name: string;
@@ -323,8 +325,9 @@ export function ChatComposer({
               <button
                 type="submit"
                 disabled={!canSubmitMessage}
-                className="absolute bottom-3 right-3 h-8 bg-background px-3 text-sm text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-background"
+                className="absolute bottom-3 right-3 inline-flex h-8 items-center gap-2 bg-background px-3 text-sm text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-background"
               >
+                {isUploadingFiles ? <LoadingSpinner className="h-3 w-3" /> : null}
                 {isUploadingFiles ? '上传中' : '发送'}
               </button>
             </>

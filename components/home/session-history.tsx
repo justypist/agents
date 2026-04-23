@@ -1,6 +1,6 @@
 'use client';
 
-import Link from 'next/link';
+import Link, { useLinkStatus } from 'next/link';
 import {
   useCallback,
   useEffect,
@@ -10,6 +10,7 @@ import {
   useTransition,
 } from 'react';
 
+import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import type { HomeChatSessionItem } from '@/lib/chat-session';
 
 const CHAT_SESSION_PAGE_SIZE = 10;
@@ -34,6 +35,7 @@ export function SessionHistory({
   const [hasMore, setHasMore] = useState(initialHasMore);
   const [showArchived, setShowArchived] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [isRefreshingList, setIsRefreshingList] = useState(false);
   const [pendingSessionIds, setPendingSessionIds] = useState<string[]>([]);
   const [isPendingFilter, startFilterTransition] = useTransition();
   const pendingSessionIdSet = useMemo(
@@ -67,6 +69,8 @@ export function SessionHistory({
   const handleToggleArchivedVisibility = useCallback(async (): Promise<void> => {
     const nextShowArchived = !showArchived;
 
+    setIsRefreshingList(true);
+
     try {
       const result = await loadPage(1, nextShowArchived);
 
@@ -78,11 +82,13 @@ export function SessionHistory({
       });
     } catch {
       window.alert('加载会话失败，请稍后重试。');
+    } finally {
+      setIsRefreshingList(false);
     }
   }, [loadPage, showArchived]);
 
   const handleLoadMore = useCallback(async (): Promise<void> => {
-    if (loadingMore || !hasMore) {
+    if (loadingMore || isRefreshingList || !hasMore) {
       return;
     }
 
@@ -103,7 +109,7 @@ export function SessionHistory({
     } finally {
       setLoadingMore(false);
     }
-  }, [hasMore, loadPage, loadingMore, page, showArchived]);
+  }, [hasMore, isRefreshingList, loadPage, loadingMore, page, showArchived]);
 
   const handleToggleArchive = useCallback(
     async (sessionId: string, archived: boolean): Promise<void> => {
@@ -162,7 +168,12 @@ export function SessionHistory({
       entries => {
         const entry = entries[0];
 
-        if (!entry?.isIntersecting || loadingMore || isPendingFilter) {
+        if (
+          !entry?.isIntersecting ||
+          loadingMore ||
+          isRefreshingList ||
+          isPendingFilter
+        ) {
           return;
         }
 
@@ -178,7 +189,7 @@ export function SessionHistory({
     return () => {
       observer.disconnect();
     };
-  }, [handleLoadMore, hasMore, isPendingFilter, loadingMore]);
+  }, [handleLoadMore, hasMore, isPendingFilter, isRefreshingList, loadingMore]);
 
   return (
     <section className="mt-12">
@@ -195,10 +206,19 @@ export function SessionHistory({
           onClick={() => {
             void handleToggleArchivedVisibility();
           }}
-          disabled={isPendingFilter}
-          className="h-9 border border-border bg-background px-3 text-sm text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-background"
+          disabled={isRefreshingList || isPendingFilter}
+          className="inline-flex h-9 items-center justify-center gap-2 border border-border bg-background px-3 text-sm text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-background"
         >
-          {showArchived ? '隐藏归档' : '显示归档'}
+          {isRefreshingList || isPendingFilter ? (
+            <>
+              <LoadingSpinner />
+              切换中...
+            </>
+          ) : showArchived ? (
+            '隐藏归档'
+          ) : (
+            '显示归档'
+          )}
         </button>
       </div>
 
@@ -236,22 +256,26 @@ export function SessionHistory({
                     ) : null}
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={event => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      void handleToggleArchive(item.id, !isArchived);
-                    }}
-                    disabled={isUpdating}
-                    className="shrink-0 border border-border bg-background px-3 py-1.5 text-sm text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-background"
-                  >
-                    {isUpdating
-                      ? '处理中...'
-                      : isArchived
-                        ? '取消归档'
-                        : '归档'}
-                  </button>
+                  <div className="flex shrink-0 items-center gap-3">
+                    <SessionLinkStatus />
+                    <button
+                      type="button"
+                      onClick={event => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        void handleToggleArchive(item.id, !isArchived);
+                      }}
+                      disabled={isUpdating}
+                      className="inline-flex items-center gap-2 border border-border bg-background px-3 py-1.5 text-sm text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-background"
+                    >
+                      {isUpdating ? <LoadingSpinner className="h-3 w-3" /> : null}
+                      {isUpdating
+                        ? '处理中...'
+                        : isArchived
+                          ? '取消归档'
+                          : '归档'}
+                    </button>
+                  </div>
                 </Link>
               );
             })}
@@ -263,19 +287,31 @@ export function SessionHistory({
         <div className="mt-4">
           <div ref={loadMoreTriggerRef} aria-hidden="true" className="h-px w-full" />
           <div className="mt-4 flex justify-center">
-          <button
-            type="button"
-            onClick={() => {
-              void handleLoadMore();
-            }}
-            disabled={loadingMore || isPendingFilter}
-            className="h-10 border border-border bg-background px-4 text-sm text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-background"
-          >
-            {loadingMore ? '加载中...' : '加载更多'}
-          </button>
+            <button
+              type="button"
+              onClick={() => {
+                void handleLoadMore();
+              }}
+              disabled={loadingMore || isRefreshingList || isPendingFilter}
+              className="inline-flex h-10 items-center gap-2 border border-border bg-background px-4 text-sm text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-background"
+            >
+              {loadingMore ? <LoadingSpinner /> : null}
+              {loadingMore ? '加载中...' : '加载更多'}
+            </button>
           </div>
         </div>
       ) : null}
     </section>
+  );
+}
+
+function SessionLinkStatus() {
+  const { pending } = useLinkStatus();
+
+  return (
+    <span className="inline-flex min-w-[72px] items-center justify-center gap-2 text-xs text-muted-foreground">
+      {pending ? <LoadingSpinner className="h-3 w-3" /> : null}
+      {pending ? '打开中...' : ''}
+    </span>
   );
 }
