@@ -1,7 +1,14 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useMemo, useState, useTransition } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from 'react';
 
 import type { HomeChatSessionItem } from '@/lib/chat-session';
 
@@ -21,6 +28,7 @@ export function SessionHistory({
   initialHasMore,
   initialItems,
 }: SessionHistoryProps) {
+  const loadMoreTriggerRef = useRef<HTMLDivElement | null>(null);
   const [items, setItems] = useState(initialItems);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(initialHasMore);
@@ -143,6 +151,35 @@ export function SessionHistory({
     [pendingSessionIdSet, showArchived],
   );
 
+  useEffect(() => {
+    const triggerElement = loadMoreTriggerRef.current;
+
+    if (!triggerElement || !hasMore) {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      entries => {
+        const entry = entries[0];
+
+        if (!entry?.isIntersecting || loadingMore || isPendingFilter) {
+          return;
+        }
+
+        void handleLoadMore();
+      },
+      {
+        rootMargin: '0px 0px 320px 0px',
+      },
+    );
+
+    observer.observe(triggerElement);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [handleLoadMore, hasMore, isPendingFilter, loadingMore]);
+
   return (
     <section className="mt-12">
       <div className="flex items-center justify-between gap-4">
@@ -223,7 +260,9 @@ export function SessionHistory({
       </div>
 
       {hasMore ? (
-        <div className="mt-4 flex justify-center">
+        <div className="mt-4">
+          <div ref={loadMoreTriggerRef} aria-hidden="true" className="h-px w-full" />
+          <div className="mt-4 flex justify-center">
           <button
             type="button"
             onClick={() => {
@@ -234,6 +273,7 @@ export function SessionHistory({
           >
             {loadingMore ? '加载中...' : '加载更多'}
           </button>
+          </div>
         </div>
       ) : null}
     </section>
