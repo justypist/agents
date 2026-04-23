@@ -219,6 +219,41 @@ export async function setChatSessionArchived(input: {
   return true;
 }
 
+export async function regenerateChatSessionTitle(input: {
+  sessionId: string;
+}): Promise<string | null | undefined> {
+  await ensureChatSessionsSchema();
+
+  const existingSession = await getDb().query.chatSessions.findFirst({
+    columns: {
+      id: true,
+      messages: true,
+    },
+    where: eq(chatSessions.id, input.sessionId),
+  });
+
+  if (existingSession == null) {
+    return undefined;
+  }
+
+  const messages = parseMessages(existingSession.messages);
+  const nextTitle = await generateChatSessionTitle(messages);
+
+  if (nextTitle == null) {
+    return null;
+  }
+
+  await getDb()
+    .update(chatSessions)
+    .set({
+      title: nextTitle,
+      updatedAt: new Date(),
+    })
+    .where(eq(chatSessions.id, input.sessionId));
+
+  return nextTitle;
+}
+
 async function ensureChatSessionsSchema(): Promise<void> {
   if (ensureChatSessionsSchemaPromise != null) {
     return ensureChatSessionsSchemaPromise;

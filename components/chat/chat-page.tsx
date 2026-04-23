@@ -29,7 +29,8 @@ type ChatPageProps = {
   agentId: string;
   sessionId: string;
   initialMessages: UIMessage[];
-  agentTitle: string;
+  initialTitle: string | null;
+  fallbackTitle: string;
 };
 
 const AUTO_SCROLL_ENTER_THRESHOLD = 24;
@@ -57,7 +58,8 @@ export function ChatPage({
   agentId,
   sessionId,
   initialMessages,
-  agentTitle,
+  initialTitle,
+  fallbackTitle,
 }: ChatPageProps) {
   const router = useRouter();
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -68,6 +70,8 @@ export function ChatPage({
   const documentVisibleRef = useRef(true);
   const canceledUploadIdsRef = useRef<Set<string>>(new Set());
   const [isCreatingSession, setIsCreatingSession] = useState(false);
+  const [isRegeneratingTitle, setIsRegeneratingTitle] = useState(false);
+  const [currentTitle, setCurrentTitle] = useState(initialTitle ?? fallbackTitle);
   const [toolTimings, setToolTimings] = useState<ToolTimingMap>({});
   const [expandedStates, setExpandedStates] = useState<ExpandedStateMap>({});
   const [canContinue, setCanContinue] = useState(false);
@@ -132,6 +136,10 @@ export function ChatPage({
   const shouldShowPendingReply =
     isLoading &&
     (lastMessage == null || lastMessage.role !== 'assistant');
+
+  useEffect(() => {
+    setCurrentTitle(initialTitle ?? fallbackTitle);
+  }, [fallbackTitle, initialTitle]);
 
   const updateAutoScrollState = (): void => {
     const container = messagesContainerRef.current;
@@ -519,14 +527,53 @@ export function ChatPage({
     }
   };
 
+  const handleRegenerateTitle = async (): Promise<void> => {
+    if (isRegeneratingTitle) {
+      return;
+    }
+
+    setIsRegeneratingTitle(true);
+
+    try {
+      const response = await fetch(`/api/sessions/${sessionId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ regenerateTitle: true }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to regenerate title');
+      }
+
+      const data: { title?: string } = await response.json();
+
+      if (typeof data.title !== 'string' || data.title.length === 0) {
+        throw new Error('Missing title');
+      }
+
+      setCurrentTitle(data.title);
+      router.refresh();
+    } catch {
+      window.alert('重新生成标题失败，请稍后重试。');
+    } finally {
+      setIsRegeneratingTitle(false);
+    }
+  };
+
   return (
     <main className="flex min-h-screen flex-col bg-background text-foreground">
       <ChatHeader
         status={status}
-        title={agentTitle}
+        title={currentTitle}
         isCreatingSession={isCreatingSession}
+        isRegeneratingTitle={isRegeneratingTitle}
         onCreateSession={() => {
           void handleCreateSession();
+        }}
+        onRegenerateTitle={() => {
+          void handleRegenerateTitle();
         }}
       />
 

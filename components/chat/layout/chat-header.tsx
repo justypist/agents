@@ -6,14 +6,18 @@ import { getStatusLabel } from '../helpers';
 
 type ChatHeaderProps = {
   isCreatingSession?: boolean;
+  isRegeneratingTitle?: boolean;
   onCreateSession?: () => void;
+  onRegenerateTitle?: () => void;
   status: string;
   title: string;
 };
 
 export function ChatHeader({
   isCreatingSession = false,
+  isRegeneratingTitle = false,
   onCreateSession,
+  onRegenerateTitle,
   status,
   title,
 }: ChatHeaderProps) {
@@ -29,7 +33,19 @@ export function ChatHeader({
             ←
           </Link>
 
-          <h1 className="text-sm font-medium tracking-[-0.01em]">{title}</h1>
+          <div className="group/title flex items-center gap-2">
+            <h1 className="text-sm font-medium tracking-[-0.01em]">{title}</h1>
+            <button
+              type="button"
+              onClick={onRegenerateTitle}
+              disabled={isRegeneratingTitle}
+              aria-label="重新生成标题"
+              title="重新生成标题"
+              className="h-6 border border-border px-2 text-xs text-muted-foreground opacity-0 transition-[opacity,color,background-color] hover:bg-muted hover:text-foreground focus-visible:opacity-100 disabled:cursor-not-allowed disabled:opacity-40 group-hover/title:opacity-100"
+            >
+              {isRegeneratingTitle ? '生成中' : '重生成'}
+            </button>
+          </div>
         </div>
 
         <div className="flex items-center gap-3">
