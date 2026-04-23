@@ -78,6 +78,9 @@ export function ChatPage({
       id: sessionId,
       messages: initialMessages,
       experimental_throttle: 50,
+      onFinish: () => {
+        router.refresh();
+      },
       transport: new DefaultChatTransport({
         api: `/api/${agentId}/${sessionId}`,
       }),

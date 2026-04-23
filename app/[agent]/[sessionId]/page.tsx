@@ -30,7 +30,7 @@ export default async function ChatSessionPage({ params }: ChatSessionPageProps) 
       agentId={resolvedAgent.id}
       sessionId={session.id}
       initialMessages={session.messages}
-      agentTitle={resolvedAgent.displayName}
+      agentTitle={session.title ?? resolvedAgent.displayName}
     />
   );
 }

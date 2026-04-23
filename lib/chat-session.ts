@@ -6,12 +6,14 @@ import { desc, eq, isNull, sql } from 'drizzle-orm';
 import { getRouteAgents } from '@/lib/agent-registry';
 import { getDb } from '@/lib/db';
 import { chatSessions } from '@/lib/db/schema';
+import { generateChatSessionTitle } from '@/lib/naming-agent';
 
 export const CHAT_SESSION_PAGE_SIZE = 10;
 
 export type StoredChatSession = {
   id: string;
   agentId: string;
+  title: string | null;
   messages: UIMessage[];
 };
 
@@ -53,6 +55,7 @@ export async function createChatSession(agentId: string): Promise<string> {
   await getDb().insert(chatSessions).values({
     id,
     agentId,
+    title: null,
     messages: '[]',
     archivedAt: null,
     createdAt: now,
@@ -78,6 +81,7 @@ export async function getChatSession(
   return {
     id: session.id,
     agentId: session.agentId,
+    title: session.title,
     messages: parseMessages(session.messages),
   };
 }
@@ -88,9 +92,19 @@ export async function saveChatSessionMessages(input: {
 }): Promise<void> {
   await ensureChatSessionsSchema();
 
+  const existingSession = await getDb().query.chatSessions.findFirst({
+    columns: {
+      title: true,
+    },
+    where: eq(chatSessions.id, input.sessionId),
+  });
+  const nextTitle =
+    existingSession?.title ?? (await generateChatSessionTitle(input.messages));
+
   await getDb()
     .update(chatSessions)
     .set({
+      title: nextTitle,
       messages: JSON.stringify(input.messages),
       updatedAt: new Date(),
     })
@@ -112,6 +126,7 @@ export async function listChatSessions(input: {
     .select({
       id: chatSessions.id,
       agentId: chatSessions.agentId,
+      title: chatSessions.title,
       messages: chatSessions.messages,
       createdAt: chatSessions.createdAt,
       updatedAt: chatSessions.updatedAt,
@@ -132,7 +147,7 @@ export async function listChatSessions(input: {
       return {
         id: row.id,
         agentId: row.agentId,
-        title: preview.title,
+        title: row.title ?? preview.title,
         previewText: preview.previewText,
         messageCount: messages.length,
         createdAt: row.createdAt.toISOString(),
@@ -211,17 +226,20 @@ async function ensureChatSessionsSchema(): Promise<void> {
 
   ensureChatSessionsSchemaPromise = (async () => {
     const result = await getDb().$client.execute("PRAGMA table_info('chat_sessions')");
-    const hasArchivedAtColumn = result.rows.some(
-      row => row.name === 'archived_at',
-    );
+    const hasArchivedAtColumn = result.rows.some(row => row.name === 'archived_at');
+    const hasTitleColumn = result.rows.some(row => row.name === 'title');
 
-    if (hasArchivedAtColumn) {
-      return;
+    if (!hasArchivedAtColumn) {
+      await getDb().$client.execute(
+        'ALTER TABLE chat_sessions ADD COLUMN archived_at integer',
+      );
     }
 
-    await getDb().$client.execute(
-      'ALTER TABLE chat_sessions ADD COLUMN archived_at integer',
-    );
+    if (!hasTitleColumn) {
+      await getDb().$client.execute(
+        'ALTER TABLE chat_sessions ADD COLUMN title text',
+      );
+    }
   })().catch(error => {
     ensureChatSessionsSchemaPromise = null;
     throw error;
