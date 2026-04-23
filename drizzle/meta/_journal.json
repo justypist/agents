@@ -8,6 +8,13 @@
       "when": 1776756584807,
       "tag": "0000_clever_queen_noir",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1776902320923,
+      "tag": "0001_curious_penance",
+      "breakpoints": true
     }
   ]
 }

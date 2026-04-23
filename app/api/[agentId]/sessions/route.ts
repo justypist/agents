@@ -1,4 +1,4 @@
-import { createChatSession } from '@/lib/chat-sessions';
+import { createChatSession } from '@/lib/chat-session';
 import { resolveRequestedAgent } from '@/lib/agent-registry';
 
 type RouteContext = {

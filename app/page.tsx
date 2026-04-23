@@ -1,9 +1,18 @@
 import Link from 'next/link';
 
+import { SessionHistory } from '@/components/home/session-history';
 import { getRouteAgents } from '@/lib/agent-registry';
+import { listHomeChatSessions } from '@/lib/chat-session';
+
+export const dynamic = 'force-dynamic';
 
 export default async function Home() {
-  const agents = await getRouteAgents();
+  const [agents, sessions] = await Promise.all([
+    getRouteAgents(),
+    listHomeChatSessions({
+      page: 1,
+    }),
+  ]);
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-1 flex-col px-6 py-12 sm:px-8 lg:px-12">
@@ -40,6 +49,11 @@ export default async function Home() {
           </Link>
         ))}
       </div>
+
+      <SessionHistory
+        initialItems={sessions.items}
+        initialHasMore={sessions.hasMore}
+      />
     </main>
   );
 }

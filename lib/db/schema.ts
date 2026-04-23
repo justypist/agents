@@ -4,6 +4,7 @@ export const chatSessions = sqliteTable('chat_sessions', {
   id: text('id').primaryKey(),
   agentId: text('agent_id').notNull(),
   messages: text('messages').notNull(),
+  archivedAt: integer('archived_at', { mode: 'timestamp_ms' }),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
 });

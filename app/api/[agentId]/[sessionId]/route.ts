@@ -7,7 +7,7 @@ import {
 } from 'ai';
 
 import { resolveRequestedAgent } from '@/lib/agent-registry';
-import { getChatSession, saveChatSessionMessages } from '@/lib/chat-sessions';
+import { getChatSession, saveChatSessionMessages } from '@/lib/chat-session';
 
 type ChatRequestBody = {
   id?: string;

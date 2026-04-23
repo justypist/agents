@@ -1,6 +1,6 @@
 import { notFound, redirect } from 'next/navigation';
 
-import { createChatSession } from '@/lib/chat-sessions';
+import { createChatSession } from '@/lib/chat-session';
 import { getAgentByRouteSegment } from '@/lib/agent-registry';
 
 export const dynamic = 'force-dynamic';

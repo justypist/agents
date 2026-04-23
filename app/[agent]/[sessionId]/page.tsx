@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation';
 
 import { ChatPage } from '@/components/chat/chat-page';
 import { getAgentByRouteSegment } from '@/lib/agent-registry';
-import { getChatSession } from '@/lib/chat-sessions';
+import { getChatSession } from '@/lib/chat-session';
 
 type ChatSessionPageProps = {
   params: Promise<{
