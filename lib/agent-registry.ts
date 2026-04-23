@@ -1,9 +1,9 @@
 import 'server-only';
 
-import { readdir } from 'node:fs/promises';
-import path from 'node:path';
-
 import type { ModelMessage, ToolSet } from 'ai';
+
+import { agent as competitiveIntelligenceAgent } from '@/agents/competitive-intelligence';
+import { agent as defaultAgent } from '@/agents/default';
 
 export type AgentStreamInput = {
   messages: ModelMessage[];
@@ -24,35 +24,61 @@ export type RegisteredAgent = {
   agent: StreamableAgent;
 };
 
-type AgentRegistry = {
-  agents: RegisteredAgent[];
-  agentsById: Map<string, RegisteredAgent>;
-  defaultAgent: RegisteredAgent;
-  routeAgents: RegisteredAgent[];
-  routeAgentsBySegment: Map<string, RegisteredAgent>;
-};
-
-const agentFilePattern = /^[a-z0-9-]+\.ts$/;
 export const DEFAULT_AGENT_ID = 'default';
-let registryPromise: Promise<AgentRegistry> | null = null;
+
+const registeredAgents = [
+  createRegisteredAgent({
+    id: DEFAULT_AGENT_ID,
+    displayName: 'Agents',
+    routeSegment: DEFAULT_AGENT_ID,
+    agent: defaultAgent,
+  }),
+  createRegisteredAgent({
+    id: 'competitive-intelligence',
+    displayName: 'Competitive Intelligence',
+    routeSegment: 'competitive-intelligence',
+    agent: competitiveIntelligenceAgent,
+  }),
+];
+
+const agentsById = new Map(registeredAgents.map(agent => [agent.id, agent]));
+const routeAgents = registeredAgents.filter(
+  agent => agent.routeSegment != null,
+);
+const routeAgentsBySegment = new Map(
+  routeAgents.map(agent => [agent.routeSegment, agent]),
+);
+
+if (!agentsById.has(DEFAULT_AGENT_ID)) {
+  throw new Error(`Missing default agent "${DEFAULT_AGENT_ID}".`);
+}
+
+if (agentsById.size !== registeredAgents.length) {
+  throw new Error('Duplicate agent id.');
+}
+
+if (routeAgents.length !== registeredAgents.length) {
+  throw new Error('Agent is missing routeSegment.');
+}
+
+if (routeAgentsBySegment.size !== routeAgents.length) {
+  throw new Error('Duplicate route segment.');
+}
 
 export async function getRouteAgents(): Promise<RegisteredAgent[]> {
-  const registry = await getRegistry();
-  return registry.routeAgents;
+  return routeAgents;
 }
 
 export async function getAgentById(
   agentId: string,
 ): Promise<RegisteredAgent | null> {
-  const registry = await getRegistry();
-  return registry.agentsById.get(agentId) ?? null;
+  return agentsById.get(agentId) ?? null;
 }
 
 export async function getAgentByRouteSegment(
   segment: string,
 ): Promise<RegisteredAgent | null> {
-  const registry = await getRegistry();
-  return registry.routeAgentsBySegment.get(segment) ?? null;
+  return routeAgentsBySegment.get(segment) ?? null;
 }
 
 export async function resolveRequestedAgent(
@@ -61,104 +87,16 @@ export async function resolveRequestedAgent(
   return getAgentById(agentId ?? DEFAULT_AGENT_ID);
 }
 
-async function getRegistry(): Promise<AgentRegistry> {
-  if (registryPromise == null) {
-    registryPromise = loadRegistry();
-  }
-
-  return registryPromise;
-}
-
-async function loadRegistry(): Promise<AgentRegistry> {
-  const agentDirectory = path.join(process.cwd(), 'agents');
-  const agentFiles = (await readdir(agentDirectory))
-    .filter(fileName => agentFilePattern.test(fileName))
-    .sort();
-  const agents = await Promise.all(
-    agentFiles.map(async fileName => loadAgent(stripExtension(fileName))),
-  );
-  const defaultAgent = agents.find(agent => agent.id === DEFAULT_AGENT_ID);
-
-  if (defaultAgent == null) {
-    throw new Error(`Missing default agent "${DEFAULT_AGENT_ID}".`);
-  }
-
-  const agentsById = new Map<string, RegisteredAgent>();
-  const routeAgentsBySegment = new Map<string, RegisteredAgent>();
-
-  for (const agent of agents) {
-    if (agentsById.has(agent.id)) {
-      throw new Error(`Duplicate agent id "${agent.id}".`);
-    }
-
-    agentsById.set(agent.id, agent);
-
-    if (agent.routeSegment == null) {
-      throw new Error(`Agent "${agent.id}" is missing routeSegment.`);
-    }
-
-    if (routeAgentsBySegment.has(agent.routeSegment)) {
-      throw new Error(`Duplicate route segment "${agent.routeSegment}".`);
-    }
-
-    routeAgentsBySegment.set(agent.routeSegment, agent);
-  }
-
-  return {
-    agents,
-    agentsById,
-    defaultAgent,
-    routeAgents: [...routeAgentsBySegment.values()],
-    routeAgentsBySegment,
-  };
-}
-
-async function loadAgent(moduleName: string): Promise<RegisteredAgent> {
-  const importedModule = (await import(
-    `../agents/${moduleName}`
-  )) as Partial<Record<'agent', StreamableAgent>>;
-
-  if (importedModule.agent == null) {
-    throw new Error(`Agent module "${moduleName}" is missing agent export.`);
-  }
-
-  const routeSegment = moduleName;
-
-  if (routeSegment != null && !isValidRouteSegment(routeSegment)) {
-    throw new Error(
-      `Agent "${moduleName}" has invalid route segment "${routeSegment}".`,
-    );
-  }
-
-  return {
-    id: moduleName,
-    displayName: getAgentDisplayName(moduleName),
-    routeSegment,
-    agent: importedModule.agent,
-  };
-}
-
-function stripExtension(fileName: string): string {
-  return fileName.replace(/\.ts$/, '');
-}
-
 function isValidRouteSegment(segment: string): boolean {
   return /^[a-z0-9-]+$/.test(segment);
 }
 
-function getAgentDisplayName(moduleName: string): string {
-  switch (moduleName) {
-    case DEFAULT_AGENT_ID:
-      return 'Agents';
-    case 'chat':
-      return 'Chat';
-    case 'research':
-      return 'Research';
-    default:
-      return moduleName
-        .split('-')
-        .filter(Boolean)
-        .map(segment => segment.charAt(0).toUpperCase() + segment.slice(1))
-        .join(' ');
+function createRegisteredAgent(input: RegisteredAgent): RegisteredAgent {
+  if (!isValidRouteSegment(input.routeSegment ?? '')) {
+    throw new Error(
+      `Agent "${input.id}" has invalid route segment "${input.routeSegment}".`,
+    );
   }
+
+  return input;
 }

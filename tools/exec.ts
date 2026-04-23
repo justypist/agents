@@ -1,10 +1,14 @@
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { jsonSchema, tool } from 'ai';
 
-const WORKSPACE_ROOT = process.cwd();
+const WORKSPACE_ROOT = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '..',
+);
 const DEFAULT_TIMEOUT_MS = 20_000;
 const MAX_TIMEOUT_MS = 60_000;
 const MAX_OUTPUT_CHARS = 12_000;
@@ -64,10 +68,13 @@ function truncateOutput(value: string): string {
 
 function resolveWorkingDirectory(cwd?: string): string {
   if (cwd == null || cwd.trim().length === 0) {
-    return WORKSPACE_ROOT;
+    return /* turbopackIgnore: true */ WORKSPACE_ROOT;
   }
 
-  const resolvedDirectory = path.resolve(WORKSPACE_ROOT, cwd);
+  const resolvedDirectory = path.resolve(
+    /* turbopackIgnore: true */ WORKSPACE_ROOT,
+    cwd,
+  );
   const relativePath = path.relative(WORKSPACE_ROOT, resolvedDirectory);
 
   if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
