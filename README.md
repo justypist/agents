@@ -15,7 +15,7 @@ cp .env.example .env
 docker compose -f compose.prod.yaml up -d
 ```
 
-生产镜像启动时会自动执行数据库迁移。
+生产 compose 会同时启动应用容器和 exec 沙箱容器，沙箱镜像需先通过 build 步骤构建。生产镜像启动时会自动执行数据库迁移。
 
 ### exec 沙箱
 

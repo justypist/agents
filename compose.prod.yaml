@@ -15,6 +15,16 @@ services:
     labels:
       caddy: agents.typist.cc
       caddy.reverse_proxy: "{{upstreams 3000}}"
+  agents-exec-sandbox:
+    image: agents-exec-sandbox:latest
+    container_name: agents-exec-sandbox
+    restart: unless-stopped
+    command: sleep infinity
+    working_dir: /workspace
+    network_mode: bridge
+    volumes:
+      - exec-workspace:/workspace
+      - exec-home:/home/agent
 
 networks:
   public:
@@ -22,3 +32,7 @@ networks:
 
 volumes:
   data:
+  exec-workspace:
+    name: agents-exec-workspace
+  exec-home:
+    name: agents-exec-home
