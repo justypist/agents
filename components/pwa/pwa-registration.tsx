@@ -14,6 +14,7 @@ export function PwaRegistration() {
       try {
         const registration = await navigator.serviceWorker.register("/sw.js", {
           scope: "/",
+          updateViaCache: "none",
         });
 
         if (!disposed) {

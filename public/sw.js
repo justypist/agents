@@ -1,4 +1,4 @@
-const STATIC_CACHE = 'agents-static-v1';
+const STATIC_CACHE = 'agents-static-v2';
 const PRECACHE_URLS = [
   '/manifest.webmanifest',
   '/robots.txt',
@@ -6,6 +6,16 @@ const PRECACHE_URLS = [
   '/api/pwa-icon/192',
   '/api/pwa-icon/512',
 ];
+
+function isNetworkFirstRequest(request) {
+  if (request.method !== 'GET') {
+    return false;
+  }
+
+  const url = new URL(request.url);
+
+  return url.origin === self.location.origin && url.pathname.startsWith('/_next/static/') && request.destination === 'script';
+}
 
 self.addEventListener('install', event => {
   event.waitUntil(
@@ -54,10 +64,32 @@ function shouldCache(request) {
     return true;
   }
 
-  return ['style', 'script', 'font', 'image'].includes(request.destination);
+  return ['style', 'font', 'image'].includes(request.destination);
 }
 
 self.addEventListener('fetch', event => {
+  if (isNetworkFirstRequest(event.request)) {
+    event.respondWith(
+      fetch(event.request)
+        .then(response => {
+          if (response.ok) {
+            event.waitUntil(
+              caches.open(STATIC_CACHE).then(cache => cache.put(event.request, response.clone()))
+            );
+          }
+
+          return response;
+        })
+        .catch(async () => {
+          const cache = await caches.open(STATIC_CACHE);
+
+          return cache.match(event.request);
+        })
+    );
+
+    return;
+  }
+
   if (!shouldCache(event.request)) {
     return;
   }
