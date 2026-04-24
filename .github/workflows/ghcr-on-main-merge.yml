@@ -43,6 +43,9 @@ jobs:
       - name: Type check
         run: pnpm typecheck
 
+      - name: Unit tests
+        run: pnpm test:all
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
