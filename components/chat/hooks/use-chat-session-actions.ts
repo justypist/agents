@@ -1,7 +1,12 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
+
+type RegeneratedTitle = {
+  sessionId: string;
+  title: string;
+};
 
 export function useChatSessionActions(input: {
   agentId: string;
@@ -18,13 +23,12 @@ export function useChatSessionActions(input: {
   const router = useRouter();
   const [isCreatingSession, setIsCreatingSession] = useState(false);
   const [isRegeneratingTitle, setIsRegeneratingTitle] = useState(false);
-  const [currentTitle, setCurrentTitle] = useState(
-    input.initialTitle ?? input.fallbackTitle,
-  );
-
-  useEffect(() => {
-    setCurrentTitle(input.initialTitle ?? input.fallbackTitle);
-  }, [input.fallbackTitle, input.initialTitle]);
+  const [regeneratedTitle, setRegeneratedTitle] =
+    useState<RegeneratedTitle | null>(null);
+  const currentTitle =
+    regeneratedTitle?.sessionId === input.sessionId
+      ? regeneratedTitle.title
+      : (input.initialTitle ?? input.fallbackTitle);
 
   const handleCreateSession = useCallback(async (): Promise<void> => {
     if (isCreatingSession) {
@@ -81,7 +85,7 @@ export function useChatSessionActions(input: {
         throw new Error('Missing title');
       }
 
-      setCurrentTitle(data.title);
+      setRegeneratedTitle({ sessionId: input.sessionId, title: data.title });
       router.refresh();
     } catch {
       window.alert('重新生成标题失败，请稍后重试。');

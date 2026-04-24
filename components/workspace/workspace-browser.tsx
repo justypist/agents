@@ -97,6 +97,29 @@ function createPreviewUrl(path: string): string {
   return `/api/workspace/download?path=${encodeURIComponent(path)}&disposition=inline`;
 }
 
+async function fetchWorkspaceListing(path: string): Promise<WorkspaceListing> {
+  const response = await fetch(`/api/workspace?path=${encodeURIComponent(path)}`, {
+    cache: 'no-store',
+  });
+  const payload: unknown = await response.json();
+
+  if (!response.ok) {
+    const message =
+      typeof payload === 'object' &&
+      payload != null &&
+      typeof (payload as Record<string, unknown>).error === 'string'
+        ? (payload as { error: string }).error
+        : '读取 workspace 失败';
+    throw new Error(message);
+  }
+
+  if (!isWorkspaceListing(payload)) {
+    throw new Error('workspace 响应格式无效');
+  }
+
+  return payload;
+}
+
 function isImageFile(item: WorkspaceFileItem): boolean {
   if (item.type !== 'file') {
     return false;
@@ -136,29 +159,11 @@ export function WorkspaceBrowser() {
     setError(null);
 
     try {
-      const response = await fetch(
-        `/api/workspace?path=${encodeURIComponent(path)}`,
-        { cache: 'no-store' },
-      );
-      const payload: unknown = await response.json();
+      const nextListing = await fetchWorkspaceListing(path);
 
-      if (!response.ok) {
-        const message =
-          typeof payload === 'object' &&
-          payload != null &&
-          typeof (payload as Record<string, unknown>).error === 'string'
-            ? (payload as { error: string }).error
-            : '读取 workspace 失败';
-        throw new Error(message);
-      }
-
-      if (!isWorkspaceListing(payload)) {
-        throw new Error('workspace 响应格式无效');
-      }
-
-      setListing(payload);
-      setCurrentPath(payload.path);
-      window.history.replaceState(null, '', createWorkspaceUrl(payload.path));
+      setListing(nextListing);
+      setCurrentPath(nextListing.path);
+      window.history.replaceState(null, '', createWorkspaceUrl(nextListing.path));
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : '读取 workspace 失败');
     } finally {
@@ -167,9 +172,40 @@ export function WorkspaceBrowser() {
   }, []);
 
   useEffect(() => {
+    let isActive = true;
     const params = new URLSearchParams(window.location.search);
-    void loadPath(params.get('path') || '');
-  }, [loadPath]);
+    const path = params.get('path') || '';
+
+    async function loadInitialPath(): Promise<void> {
+      try {
+        const nextListing = await fetchWorkspaceListing(path);
+
+        if (!isActive) {
+          return;
+        }
+
+        setListing(nextListing);
+        setCurrentPath(nextListing.path);
+        window.history.replaceState(null, '', createWorkspaceUrl(nextListing.path));
+      } catch (loadError) {
+        if (isActive) {
+          setError(
+            loadError instanceof Error ? loadError.message : '读取 workspace 失败',
+          );
+        }
+      } finally {
+        if (isActive) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    void loadInitialPath();
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
 
   const handleOpen = (item: WorkspaceFileItem): void => {
     if (item.type !== 'directory') {
