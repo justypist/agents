@@ -10,7 +10,9 @@ export default defineConfig({
     trace: 'on-first-retry',
   },
   webServer: {
-    command: process.env.CI ? 'pnpm build && pnpm start' : 'pnpm dev',
+    command: process.env.CI
+      ? 'DATABASE_URL=file:.data/e2e.sqlite pnpm db:migrate && DATABASE_URL=file:.data/e2e.sqlite pnpm build && DATABASE_URL=file:.data/e2e.sqlite pnpm start'
+      : 'DATABASE_URL=file:.data/e2e.sqlite pnpm db:migrate && DATABASE_URL=file:.data/e2e.sqlite pnpm dev',
     url: 'http://localhost:3000',
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
