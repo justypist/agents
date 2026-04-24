@@ -1,25 +1,15 @@
 'use client';
 
 import type { RefObject } from 'react';
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
+import type { ComposerAttachment } from '@/components/chat/attachments/types';
+import { AttachmentList } from '@/components/chat/composer/attachment-list';
+import {
+  shouldHandleHistoryNavigation,
+  useInputHistory,
+} from '@/components/chat/composer/use-input-history';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
-
-type ComposerAttachment = {
-  id: string;
-  name: string;
-  size: number;
-  mimeType: string;
-  status:
-    | 'hashing'
-    | 'preparing'
-    | 'uploading'
-    | 'completing'
-    | 'uploaded'
-    | 'error';
-  progress: number;
-  errorText?: string;
-};
 
 type ChatComposerProps = {
   isLoading: boolean;
@@ -35,9 +25,6 @@ type ChatComposerProps = {
   onContinue: () => void;
   onStop: () => void;
 };
-
-const INPUT_HISTORY_STORAGE_KEY = 'agents:chat-input-history';
-const MAX_INPUT_HISTORY = 128;
 
 export function ChatComposer({
   isLoading,
@@ -55,14 +42,15 @@ export function ChatComposer({
 }: ChatComposerProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const dragDepthRef = useRef(0);
-  const inputDraftRef = useRef('');
-  const [input, setInput] = useState('');
-  const [inputHistory, setInputHistory] = useState<string[]>(() =>
-    readStoredInputHistory(),
-  );
-  const [inputHistoryIndex, setInputHistoryIndex] = useState<number | null>(null);
   const [isDragActive, setIsDragActive] = useState(false);
   const [isAttachmentListExpanded, setIsAttachmentListExpanded] = useState(false);
+  const {
+    input,
+    handleInputChange,
+    handleHistoryNavigate,
+    addSubmittedInput,
+    clearInput,
+  } = useInputHistory(inputRef);
   const hasAttachmentError = attachments.some(
     attachment => attachment.status === 'error',
   );
@@ -75,31 +63,6 @@ export function ChatComposer({
     setIsAttachmentListExpanded(expanded => !expanded);
   }, []);
 
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(
-        INPUT_HISTORY_STORAGE_KEY,
-        JSON.stringify(inputHistory),
-      );
-    } catch {
-      // Ignore storage failures so input remains usable in restricted environments.
-    }
-  }, [inputHistory]);
-
-  const moveCaretToInputEnd = (): void => {
-    requestAnimationFrame(() => {
-      const textarea = inputRef.current;
-
-      if (textarea == null) {
-        return;
-      }
-
-      const end = textarea.value.length;
-      textarea.focus();
-      textarea.setSelectionRange(end, end);
-    });
-  };
-
   const submitInput = (): void => {
     if (!canSubmitMessage) {
       return;
@@ -108,60 +71,11 @@ export function ChatComposer({
     const trimmedInput = input.trim();
 
     if (trimmedInput.length > 0) {
-      setInputHistory(previous => appendInputHistory(previous, trimmedInput));
+      addSubmittedInput(trimmedInput);
     }
 
-    inputDraftRef.current = '';
-    setInputHistoryIndex(null);
     onSubmit(trimmedInput);
-    setInput('');
-  };
-
-  const handleInputChange = (value: string): void => {
-    if (inputHistoryIndex != null) {
-      inputDraftRef.current = value;
-      setInputHistoryIndex(null);
-    }
-
-    setInput(value);
-  };
-
-  const handleHistoryNavigate = (direction: 'up' | 'down'): void => {
-    if (inputHistory.length === 0) {
-      return;
-    }
-
-    if (direction === 'up') {
-      const nextIndex =
-        inputHistoryIndex == null
-          ? inputHistory.length - 1
-          : Math.max(inputHistoryIndex - 1, 0);
-
-      if (inputHistoryIndex == null) {
-        inputDraftRef.current = input;
-      }
-
-      setInputHistoryIndex(nextIndex);
-      setInput(inputHistory[nextIndex]);
-      moveCaretToInputEnd();
-      return;
-    }
-
-    if (inputHistoryIndex == null) {
-      return;
-    }
-
-    if (inputHistoryIndex === inputHistory.length - 1) {
-      setInputHistoryIndex(null);
-      setInput(inputDraftRef.current);
-      moveCaretToInputEnd();
-      return;
-    }
-
-    const nextIndex = inputHistoryIndex + 1;
-    setInputHistoryIndex(nextIndex);
-    setInput(inputHistory[nextIndex]);
-    moveCaretToInputEnd();
+    clearInput();
   };
 
   return (
@@ -336,189 +250,6 @@ export function ChatComposer({
       </form>
     </>
   );
-}
-
-const AttachmentList = memo(function AttachmentList({
-  attachments,
-  isExpanded,
-  onToggleExpanded,
-  onRemoveAttachment,
-}: {
-  attachments: ComposerAttachment[];
-  isExpanded: boolean;
-  onToggleExpanded: () => void;
-  onRemoveAttachment: (attachmentId: string) => void;
-}) {
-  const isAttachmentListCollapsible = attachments.length > 4;
-  const attachmentSummary = summarizeAttachments(attachments);
-  const shouldShowAttachmentList = attachments.length <= 6 || isExpanded;
-
-  return (
-    <div className="mb-3 flex flex-col gap-2">
-      <div className="flex items-center justify-between gap-3 border border-border bg-background px-3 py-2 text-sm">
-        <p className="min-w-0 flex-1 text-muted-foreground">{attachmentSummary}</p>
-
-        {isAttachmentListCollapsible ? (
-          <button
-            type="button"
-            onClick={onToggleExpanded}
-            className="shrink-0 text-xs text-muted-foreground transition-colors hover:text-foreground"
-          >
-            {shouldShowAttachmentList ? '收起' : '展开'}
-          </button>
-        ) : null}
-      </div>
-
-      {shouldShowAttachmentList ? (
-        <div className="max-h-56 overflow-y-auto border border-border bg-background">
-          {attachments.map(attachment => (
-            <div
-              key={attachment.id}
-              className="flex items-center justify-between gap-3 border-b border-border px-3 py-2 text-sm last:border-b-0"
-            >
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-foreground">{attachment.name}</p>
-                <p className="text-xs text-muted-foreground">
-                  {formatAttachmentStatus(attachment)}
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => onRemoveAttachment(attachment.id)}
-                className="shrink-0 text-xs text-muted-foreground transition-colors hover:text-foreground"
-              >
-                移除
-              </button>
-            </div>
-          ))}
-        </div>
-      ) : null}
-    </div>
-  );
-});
-
-function shouldHandleHistoryNavigation(
-  textarea: HTMLTextAreaElement,
-  key: string,
-): key is 'ArrowUp' | 'ArrowDown' {
-  if (key !== 'ArrowUp' && key !== 'ArrowDown') {
-    return false;
-  }
-
-  if (textarea.selectionStart !== textarea.selectionEnd) {
-    return false;
-  }
-
-  const caret = textarea.selectionStart;
-
-  if (key === 'ArrowUp') {
-    return !textarea.value.slice(0, caret).includes('\n');
-  }
-
-  return !textarea.value.slice(caret).includes('\n');
-}
-
-function formatAttachmentStatus(attachment: ComposerAttachment): string {
-  const sizeLabel = formatFileSize(attachment.size);
-
-  switch (attachment.status) {
-    case 'hashing':
-      return `${sizeLabel} · 计算哈希中`;
-    case 'preparing':
-      return `${sizeLabel} · 申请上传地址中`;
-    case 'uploading':
-      return `${sizeLabel} · 上传中 ${Math.round(attachment.progress * 100)}%`;
-    case 'completing':
-      return `${sizeLabel} · 校验上传结果中`;
-    case 'uploaded':
-      return `${sizeLabel} · 已上传 · ${attachment.mimeType}`;
-    case 'error':
-      return `${sizeLabel} · ${attachment.errorText ?? '上传失败'}`;
-    default:
-      return sizeLabel;
-  }
-}
-
-function formatFileSize(size: number): string {
-  if (size < 1024) {
-    return `${size} B`;
-  }
-
-  if (size < 1024 * 1024) {
-    return `${(size / 1024).toFixed(1)} KB`;
-  }
-
-  if (size < 1024 * 1024 * 1024) {
-    return `${(size / 1024 / 1024).toFixed(1)} MB`;
-  }
-
-  return `${(size / 1024 / 1024 / 1024).toFixed(1)} GB`;
-}
-
-function readStoredInputHistory(): string[] {
-  if (typeof window === 'undefined') {
-    return [];
-  }
-
-  try {
-    const stored = window.localStorage.getItem(INPUT_HISTORY_STORAGE_KEY);
-
-    if (stored == null) {
-      return [];
-    }
-
-    const parsed: unknown = JSON.parse(stored);
-
-    if (!Array.isArray(parsed)) {
-      return [];
-    }
-
-    return parsed
-      .filter((entry): entry is string => typeof entry === 'string')
-      .slice(-MAX_INPUT_HISTORY);
-  } catch {
-    return [];
-  }
-}
-
-function appendInputHistory(history: string[], input: string): string[] {
-  if (history[history.length - 1] === input) {
-    return history;
-  }
-
-  return [...history, input].slice(-MAX_INPUT_HISTORY);
-}
-
-function summarizeAttachments(attachments: ComposerAttachment[]): string {
-  const uploadedCount = attachments.filter(
-    attachment => attachment.status === 'uploaded',
-  ).length;
-  const activeCount = attachments.filter(
-    attachment =>
-      attachment.status === 'hashing' ||
-      attachment.status === 'preparing' ||
-      attachment.status === 'uploading' ||
-      attachment.status === 'completing',
-  ).length;
-  const errorCount = attachments.filter(
-    attachment => attachment.status === 'error',
-  ).length;
-  const summaryParts = [`共 ${attachments.length} 个文件`];
-
-  if (activeCount > 0) {
-    summaryParts.push(`上传中 ${activeCount}`);
-  }
-
-  if (uploadedCount > 0) {
-    summaryParts.push(`已完成 ${uploadedCount}`);
-  }
-
-  if (errorCount > 0) {
-    summaryParts.push(`失败 ${errorCount}`);
-  }
-
-  return summaryParts.join(' · ');
 }
 
 function hasFiles(dataTransfer: DataTransfer | null): boolean {

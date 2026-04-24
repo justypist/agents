@@ -2,6 +2,8 @@ import {
   regenerateChatSessionTitle,
   setChatSessionArchived,
 } from '@/lib/chat-session';
+import { parseJsonBody } from '@/lib/api/parse-json';
+import { jsonError } from '@/lib/api/responses';
 
 type RouteContext = {
   params: Promise<{
@@ -19,17 +21,17 @@ export async function PATCH(
   context: RouteContext,
 ): Promise<Response> {
   const { sessionId } = await context.params;
-  const body = (await parseJson(request)) as UpdateSessionRequest | null;
+  const body = (await parseJsonBody(request)) as UpdateSessionRequest | null;
 
   if (body?.regenerateTitle === true) {
     const title = await regenerateChatSessionTitle({ sessionId });
 
     if (title === undefined) {
-      return Response.json({ error: 'Unknown sessionId' }, { status: 404 });
+      return jsonError('Unknown sessionId', 404);
     }
 
     if (title == null) {
-      return Response.json({ error: 'Failed to generate title' }, { status: 400 });
+      return jsonError('Failed to generate title', 400);
     }
 
     return Response.json({
@@ -39,7 +41,7 @@ export async function PATCH(
   }
 
   if (typeof body?.archived !== 'boolean') {
-    return Response.json({ error: 'Invalid archived value' }, { status: 400 });
+    return jsonError('Invalid archived value', 400);
   }
 
   const updated = await setChatSessionArchived({
@@ -48,19 +50,11 @@ export async function PATCH(
   });
 
   if (!updated) {
-    return Response.json({ error: 'Unknown sessionId' }, { status: 404 });
+    return jsonError('Unknown sessionId', 404);
   }
 
   return Response.json({
     sessionId,
     archived: body.archived,
   });
-}
-
-async function parseJson(request: Request): Promise<unknown> {
-  try {
-    return (await request.json()) as unknown;
-  } catch {
-    return null;
-  }
 }

@@ -1,18 +1,7 @@
-import {
-  consumeStream,
-  convertToModelMessages,
-  createIdGenerator,
-  type UIMessage,
-  validateUIMessages,
-} from 'ai';
-
-import { resolveRequestedAgent } from '@/lib/agent-registry';
-import { getChatSession, saveChatSessionMessages } from '@/lib/chat-session';
-
-type ChatRequestBody = {
-  id?: string;
-  messages: UIMessage[];
-};
+import { parseJsonBody } from '@/lib/api/parse-json';
+import { jsonError } from '@/lib/api/responses';
+import { isChatRequestBody } from '@/lib/chat/chat-request-validation';
+import { streamChatSessionTurn } from '@/lib/chat/chat-stream-service';
 
 type RouteContext = {
   params: Promise<{
@@ -21,59 +10,22 @@ type RouteContext = {
   }>;
 };
 
-const generateMessageId = createIdGenerator({
-  prefix: 'msg',
-  size: 16,
-});
-
 export async function POST(
   request: Request,
   context: RouteContext,
 ): Promise<Response> {
-  const { id, messages }: ChatRequestBody = await request.json();
+  const body = await parseJsonBody(request);
   const { agentId, sessionId } = await context.params;
-  const resolvedAgent = await resolveRequestedAgent(agentId);
 
-  if (resolvedAgent == null) {
-    return Response.json({ error: 'Unknown agentId' }, { status: 400 });
+  if (!isChatRequestBody(body)) {
+    return jsonError('Invalid chat request', 400);
   }
 
-  if (id != null && id !== sessionId) {
-    return Response.json({ error: 'Mismatched sessionId' }, { status: 400 });
-  }
-
-  const session = await getChatSession(sessionId);
-
-  if (session == null) {
-    return Response.json({ error: 'Unknown sessionId' }, { status: 404 });
-  }
-
-  if (session.agentId !== resolvedAgent.id) {
-    return Response.json(
-      { error: 'Session does not belong to agentId' },
-      { status: 400 },
-    );
-  }
-
-  const validatedMessages = await validateUIMessages({
-    messages,
-  });
-  const modelMessages = await convertToModelMessages(validatedMessages);
-  const result = await resolvedAgent.agent.stream({
-    messages: modelMessages,
+  return streamChatSessionTurn({
+    agentId,
+    sessionId,
+    requestSessionId: body.id,
+    messages: body.messages,
     abortSignal: request.signal,
-  });
-
-  return result.toUIMessageStreamResponse({
-    originalMessages: validatedMessages,
-    generateMessageId,
-    sendReasoning: true,
-    consumeSseStream: consumeStream,
-    onFinish: async (event: { messages: UIMessage[] }) => {
-      await saveChatSessionMessages({
-        sessionId,
-        messages: event.messages,
-      });
-    },
   });
 }
