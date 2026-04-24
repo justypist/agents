@@ -17,6 +17,23 @@ docker compose -f compose.prod.yaml up -d
 
 生产镜像启动时会自动执行数据库迁移。
 
+### exec 沙箱
+
+`exec` 工具不会直接在应用容器内运行命令，而是通过挂载的 Docker socket 创建并复用一个持久容器。
+
+- 默认容器名：`agents-exec-sandbox`
+- 默认镜像：`agents-exec-sandbox:latest`
+- 默认工作目录：`/workspace`
+- 默认网络：`bridge`
+- workspace volume：`agents-exec-workspace`
+- home volume：`agents-exec-home`
+
+沙箱镜像由 `Dockerfile.exec-sandbox` 构建，预装 Node.js Current、最新 pnpm、Python 3.14、uv、git、jq、sqlite3、build-essential 等常用工具。容器会被保留，系统或应用重启后会重新 `start`，因此容器 writable layer、`/workspace` 和 `/home/agent` 里的内容都会继续存在。需要调整镜像、网络或 volume 时，修改 `Dockerfile.exec-sandbox` 或 `config.ts` 里的 `execSandbox`，重新构建镜像，并删除旧沙箱容器让它按新配置重建：
+
+```shell
+docker rm -f agents-exec-sandbox
+```
+
 ## API
 
 当前聊天页面路由：`/{agentId}/{sessionId}`

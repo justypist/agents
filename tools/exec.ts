@@ -1,24 +1,17 @@
-import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
 import { jsonSchema, tool } from 'ai';
 
-const WORKSPACE_ROOT = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  '..',
-);
+import {
+  normalizeWorkspacePath,
+  runSandboxCommand,
+  SANDBOX_CONTAINER,
+  SANDBOX_IMAGE,
+  SANDBOX_NETWORK,
+  toSandboxPath,
+} from '@/lib/exec-sandbox';
+
 const DEFAULT_TIMEOUT_MS = 20_000;
 const MAX_TIMEOUT_MS = 60_000;
 const MAX_OUTPUT_CHARS = 12_000;
-const SHELL_CANDIDATES = [
-  process.env.SHELL,
-  '/bin/bash',
-  '/usr/bin/bash',
-  '/bin/sh',
-  '/usr/bin/sh',
-];
 
 type execInput = {
   command: string;
@@ -29,6 +22,12 @@ type execInput = {
 type execResult = {
   command: string;
   cwd: string;
+  sandbox: {
+    container: string;
+    image: string;
+    cwd: string;
+    network: string;
+  };
   exitCode: number | null;
   signal: NodeJS.Signals | null;
   timedOut: boolean;
@@ -45,7 +44,7 @@ const execInputSchema = jsonSchema<execInput>({
     },
     cwd: {
       type: 'string',
-      description: '命令工作目录，默认为仓库根目录，且必须位于当前 workspace 内',
+      description: '命令工作目录，默认为 /workspace，可传相对路径或 /workspace 下绝对路径',
     },
     timeoutMs: {
       type: 'integer',
@@ -66,24 +65,6 @@ function truncateOutput(value: string): string {
   return `${value.slice(0, MAX_OUTPUT_CHARS)}\n...[truncated]`;
 }
 
-function resolveWorkingDirectory(cwd?: string): string {
-  if (cwd == null || cwd.trim().length === 0) {
-    return /* turbopackIgnore: true */ WORKSPACE_ROOT;
-  }
-
-  const resolvedDirectory = path.resolve(
-    /* turbopackIgnore: true */ WORKSPACE_ROOT,
-    cwd,
-  );
-  const relativePath = path.relative(WORKSPACE_ROOT, resolvedDirectory);
-
-  if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
-    throw new Error('cwd 必须位于当前 workspace 内');
-  }
-
-  return resolvedDirectory;
-}
-
 function normalizeCommand(command: string): string {
   const normalizedCommand = command.trim();
 
@@ -102,71 +83,46 @@ function normalizeTimeout(timeoutMs?: number): number {
   return Math.min(Math.max(Math.floor(timeoutMs), 1_000), MAX_TIMEOUT_MS);
 }
 
-function resolveShell(): string {
-  for (const candidate of SHELL_CANDIDATES) {
-    if (candidate == null || candidate.trim().length === 0) {
-      continue;
-    }
-
-    if (existsSync(candidate)) {
-      return candidate;
-    }
-  }
-
-  throw new Error('未找到可用 shell，请确认系统存在 /bin/sh 或配置 SHELL 环境变量');
+function resolveSandboxWorkingDirectory(cwd?: string): string {
+  return toSandboxPath(normalizeWorkspacePath(cwd));
 }
 
 export const exec = tool({
   description:
-    '在当前 workspace 内执行本地 shell 命令，适合读写文件、运行构建、调用 CLI；仅在确有必要时使用',
+    '在持久 Docker 沙箱内执行 shell 命令，适合读写文件、安装依赖、运行构建、调用 CLI；不会直接在应用容器或宿主机执行',
   inputSchema: execInputSchema,
   execute: async input => {
     const command = normalizeCommand(input.command);
-    const cwd = resolveWorkingDirectory(input.cwd);
+    const sandboxCwd = resolveSandboxWorkingDirectory(input.cwd);
     const timeoutMs = normalizeTimeout(input.timeoutMs);
-    const shell = resolveShell();
+    const timeoutSeconds = String(Math.max(1, Math.ceil(timeoutMs / 1_000)));
 
-    return await new Promise<execResult>((resolve, reject) => {
-      const child = spawn(shell, ['-c', command], {
-        cwd,
-        env: process.env,
-        stdio: ['ignore', 'pipe', 'pipe'],
-      });
+    const result = await runSandboxCommand(
+      [
+        'timeout',
+        '--kill-after=2s',
+        `${timeoutSeconds}s`,
+        'bash',
+        '-lc',
+        command,
+      ],
+      { cwd: sandboxCwd, timeoutMs: timeoutMs + 5_000 },
+    );
 
-      let stdout = '';
-      let stderr = '';
-      let timedOut = false;
-
-      const timeout = setTimeout(() => {
-        timedOut = true;
-        child.kill('SIGTERM');
-      }, timeoutMs);
-
-      child.stdout.on('data', chunk => {
-        stdout += String(chunk);
-      });
-
-      child.stderr.on('data', chunk => {
-        stderr += String(chunk);
-      });
-
-      child.on('error', error => {
-        clearTimeout(timeout);
-        reject(error);
-      });
-
-      child.on('close', (exitCode, signal) => {
-        clearTimeout(timeout);
-        resolve({
-          command,
-          cwd,
-          exitCode,
-          signal,
-          timedOut,
-          stdout: truncateOutput(stdout),
-          stderr: truncateOutput(stderr),
-        });
-      });
-    });
+    return {
+      command,
+      cwd: sandboxCwd,
+      sandbox: {
+        container: SANDBOX_CONTAINER,
+        image: SANDBOX_IMAGE,
+        cwd: sandboxCwd,
+        network: SANDBOX_NETWORK,
+      },
+      exitCode: result.exitCode,
+      signal: result.signal,
+      timedOut: result.timedOut || result.exitCode === 124,
+      stdout: truncateOutput(result.stdout),
+      stderr: truncateOutput(result.stderr),
+    } satisfies execResult;
   },
 });

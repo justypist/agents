@@ -37,5 +37,12 @@ export const config = {
     secretKey: process.env.OSS_SECRET_KEY?.trim() || 'xxx',
     bucket: process.env.OSS_BUCKET?.trim() || 'agents',
     region: process.env.OSS_REGION?.trim() || 'auto',
-  }
+  },
+  execSandbox: {
+    container: 'agents-exec-sandbox',
+    image: 'agents-exec-sandbox:latest',
+    network: 'bridge',
+    workspaceVolume: 'agents-exec-workspace',
+    homeVolume: 'agents-exec-home',
+  },
 };

@@ -4,3 +4,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+  exec-sandbox:
+    image: agents-exec-sandbox:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.exec-sandbox

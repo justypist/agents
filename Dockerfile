@@ -2,7 +2,7 @@ FROM node:lts-alpine AS base
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 WORKDIR /app
-RUN apk add --no-cache libc6-compat
+RUN apk add --no-cache docker-cli libc6-compat
 RUN corepack enable
 
 FROM base AS deps
