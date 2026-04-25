@@ -11,36 +11,149 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 
+import { getWorkspacePreviewKind, isTextMediaType } from '@/lib/workspace-preview';
+
 type FilePartData = Extract<UIMessage['parts'][number], { type: 'file' }>;
+
+type FilePreviewData = {
+  url: string;
+  downloadUrl?: string;
+  filename?: string;
+  mediaType?: string;
+};
 
 const MIN_SCALE = 1;
 const MAX_SCALE = 6;
 const SCALE_STEP = 0.25;
+const TEXT_PREVIEW_LIMIT = 128 * 1024;
 
 type Point = {
   x: number;
   y: number;
 };
 
+type TextPreviewState = {
+  url: string;
+  text: string | null;
+  error: string | null;
+};
+
 export function FilePart({ part }: { part: FilePartData }) {
-  if (!isImageFile(part)) {
-    return (
-      <a
-        href={part.url}
-        target="_blank"
-        rel="noreferrer"
-        className="inline-flex items-center gap-2 border border-border px-3 py-2 text-sm text-foreground transition-colors hover:bg-muted"
-      >
-        <span className="truncate">{part.filename ?? part.mediaType}</span>
-        <span className="text-xs text-muted-foreground">{part.mediaType}</span>
-      </a>
-    );
+  if (isImageFile(part)) {
+    return <ImageFilePart part={part} />;
   }
 
-  return <ImageFilePart part={part} />;
+  if (isTextFile(part)) {
+    return <TextFilePart part={part} />;
+  }
+
+  return <DownloadFileLink part={part} />;
 }
 
-function ImageFilePart({ part }: { part: FilePartData }) {
+function DownloadFileLink({ part }: { part: FilePreviewData }) {
+  return (
+    <a
+      href={part.url}
+      target="_blank"
+      rel="noreferrer"
+      className="inline-flex items-center gap-2 border border-border px-3 py-2 text-sm text-foreground transition-colors hover:bg-muted"
+    >
+      <span className="truncate">{part.filename ?? part.mediaType ?? part.url}</span>
+      {part.mediaType != null ? (
+        <span className="text-xs text-muted-foreground">{part.mediaType}</span>
+      ) : null}
+    </a>
+  );
+}
+
+export function TextFilePart({ part }: { part: FilePreviewData }) {
+  const [previewState, setPreviewState] = useState<TextPreviewState | null>(null);
+  const activePreviewState = previewState?.url === part.url ? previewState : null;
+
+  useEffect(() => {
+    let isActive = true;
+    const controller = new AbortController();
+
+    async function loadPreview(): Promise<void> {
+      try {
+        const response = await fetch(part.url, {
+          cache: 'no-store',
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          throw new Error('读取文件失败');
+        }
+
+        const contentLength = Number(response.headers.get('content-length'));
+
+        if (Number.isFinite(contentLength) && contentLength > TEXT_PREVIEW_LIMIT) {
+          throw new Error('文件过大，请下载查看');
+        }
+
+        const text = await response.text();
+
+        if (!isActive) {
+          return;
+        }
+
+        setPreviewState({
+          url: part.url,
+          text: text.length > TEXT_PREVIEW_LIMIT
+            ? `${text.slice(0, TEXT_PREVIEW_LIMIT)}\n\n... 文件过大，已截断预览。`
+            : text,
+          error: null,
+        });
+      } catch (loadError) {
+        if (!isActive || controller.signal.aborted) {
+          return;
+        }
+
+        setPreviewState({
+          url: part.url,
+          text: null,
+          error: loadError instanceof Error ? loadError.message : '读取文件失败',
+        });
+      }
+    }
+
+    void loadPreview();
+
+    return () => {
+      isActive = false;
+      controller.abort();
+    };
+  }, [part.url]);
+
+  return (
+    <div className="max-w-full overflow-hidden border border-border bg-background text-sm">
+      <div className="flex items-center justify-between gap-3 border-b border-border px-3 py-2">
+        <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">
+          {part.filename ?? part.mediaType ?? '文本文件'}
+        </span>
+        <a
+          href={part.downloadUrl ?? part.url}
+          target="_blank"
+          rel="noreferrer"
+          className="shrink-0 text-xs text-muted-foreground transition-colors hover:text-foreground"
+        >
+          下载
+        </a>
+      </div>
+      {activePreviewState?.text != null ? (
+        <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words p-3 font-mono text-xs leading-5 text-foreground">
+          {activePreviewState.text.length > 0 ? activePreviewState.text : '(空文件)'}
+        </pre>
+      ) : (
+        <p className="p-3 text-xs text-muted-foreground">
+          {activePreviewState?.error ?? '正在读取文本预览...'}
+        </p>
+      )}
+    </div>
+  );
+}
+
+export function ImageFilePart({ part }: { part: FilePreviewData }) {
   const [isOpen, setIsOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [scale, setScale] = useState(MIN_SCALE);
@@ -175,7 +288,7 @@ function ImageFilePart({ part }: { part: FilePartData }) {
                     +
                   </button>
                   <a
-                    href={part.url}
+                    href={part.downloadUrl ?? part.url}
                     target="_blank"
                     rel="noreferrer"
                     className="border border-white/15 px-3 py-1.5 text-white transition-colors hover:bg-white/10"
@@ -244,7 +357,15 @@ function isImageFile(part: FilePartData): boolean {
     return true;
   }
 
-  return /\.(avif|gif|jpe?g|png|svg|webp)$/i.test(part.filename ?? '');
+  return getWorkspacePreviewKind(part.filename) === 'image';
+}
+
+function isTextFile(part: FilePartData): boolean {
+  if (isTextMediaType(part.mediaType)) {
+    return true;
+  }
+
+  return getWorkspacePreviewKind(part.filename) === 'text';
 }
 
 function clamp(value: number, min: number, max: number): number {
