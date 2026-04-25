@@ -22,10 +22,12 @@ const codexOptions: OpenAILanguageModelResponsesOptions = {
 }
 
 const chatOptions: OpenAILanguageModelResponsesOptions = {
+  promptCacheKey: 'agents',
+  promptCacheRetention: '24h',
   forceReasoning: true,
   parallelToolCalls: true,
   textVerbosity: 'medium',
-  reasoningEffort: 'medium',
+  reasoningEffort: 'high',
   reasoningSummary: 'auto',
   include: ['reasoning.encrypted_content'],
 }
