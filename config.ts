@@ -14,7 +14,9 @@ export const config = {
     },
   },
   database: {
-    url: process.env.DATABASE_URL?.trim() || 'file:.data/agents.sqlite',
+    url:
+      process.env.DATABASE_URL?.trim() ||
+      'postgres://agents:agents@localhost:5432/agents',
   },
   tavily: {
     apiKeys: (process.env.TAVILY_API_KEY || 'tvly-xxx')

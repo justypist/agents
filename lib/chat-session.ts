@@ -1,7 +1,7 @@
 import 'server-only';
 
 import { generateId, type UIMessage } from 'ai';
-import { desc, eq, isNull, sql } from 'drizzle-orm';
+import { desc, eq, isNotNull, isNull } from 'drizzle-orm';
 
 import { getRouteAgents } from '@/lib/agent-registry';
 import { getDb } from '@/lib/db';
@@ -44,11 +44,7 @@ export type HomeChatSessionListPage = {
   hasMore: boolean;
 };
 
-let ensureChatSessionsSchemaPromise: Promise<void> | null = null;
-
 export async function createChatSession(agentId: string): Promise<string> {
-  await ensureChatSessionsSchema();
-
   const id = generateId();
   const now = new Date();
 
@@ -68,8 +64,6 @@ export async function createChatSession(agentId: string): Promise<string> {
 export async function getChatSession(
   sessionId: string,
 ): Promise<StoredChatSession | null> {
-  await ensureChatSessionsSchema();
-
   const session = await getDb().query.chatSessions.findFirst({
     where: eq(chatSessions.id, sessionId),
   });
@@ -90,8 +84,6 @@ export async function saveChatSessionMessages(input: {
   sessionId: string;
   messages: UIMessage[];
 }): Promise<void> {
-  await ensureChatSessionsSchema();
-
   const existingSession = await getDb().query.chatSessions.findFirst({
     columns: {
       title: true,
@@ -116,8 +108,6 @@ export async function listChatSessions(input: {
   page?: number;
   pageSize?: number;
 }): Promise<ChatSessionListPage> {
-  await ensureChatSessionsSchema();
-
   const includeArchived = input.includeArchived ?? false;
   const page = normalizePage(input.page);
   const pageSize = normalizePageSize(input.pageSize);
@@ -133,7 +123,11 @@ export async function listChatSessions(input: {
       archivedAt: chatSessions.archivedAt,
     })
     .from(chatSessions)
-    .where(includeArchived ? sql`${chatSessions.archivedAt} is not null` : isNull(chatSessions.archivedAt))
+    .where(
+      includeArchived
+        ? isNotNull(chatSessions.archivedAt)
+        : isNull(chatSessions.archivedAt),
+    )
     .orderBy(desc(chatSessions.updatedAt), desc(chatSessions.id))
     .limit(pageSize + 1)
     .offset(offset);
@@ -195,8 +189,6 @@ export async function setChatSessionArchived(input: {
   sessionId: string;
   archived: boolean;
 }): Promise<boolean> {
-  await ensureChatSessionsSchema();
-
   const existingSession = await getDb().query.chatSessions.findFirst({
     columns: {
       id: true,
@@ -222,8 +214,6 @@ export async function setChatSessionArchived(input: {
 export async function regenerateChatSessionTitle(input: {
   sessionId: string;
 }): Promise<string | null | undefined> {
-  await ensureChatSessionsSchema();
-
   const existingSession = await getDb().query.chatSessions.findFirst({
     columns: {
       id: true,
@@ -252,35 +242,6 @@ export async function regenerateChatSessionTitle(input: {
     .where(eq(chatSessions.id, input.sessionId));
 
   return nextTitle;
-}
-
-async function ensureChatSessionsSchema(): Promise<void> {
-  if (ensureChatSessionsSchemaPromise != null) {
-    return ensureChatSessionsSchemaPromise;
-  }
-
-  ensureChatSessionsSchemaPromise = (async () => {
-    const result = await getDb().$client.execute("PRAGMA table_info('chat_sessions')");
-    const hasArchivedAtColumn = result.rows.some(row => row.name === 'archived_at');
-    const hasTitleColumn = result.rows.some(row => row.name === 'title');
-
-    if (!hasArchivedAtColumn) {
-      await getDb().$client.execute(
-        'ALTER TABLE chat_sessions ADD COLUMN archived_at integer',
-      );
-    }
-
-    if (!hasTitleColumn) {
-      await getDb().$client.execute(
-        'ALTER TABLE chat_sessions ADD COLUMN title text',
-      );
-    }
-  })().catch(error => {
-    ensureChatSessionsSchemaPromise = null;
-    throw error;
-  });
-
-  return ensureChatSessionsSchemaPromise;
 }
 
 function parseMessages(value: string): UIMessage[] {

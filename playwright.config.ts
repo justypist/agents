@@ -1,5 +1,12 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const databaseUrl =
+  process.env.E2E_DATABASE_URL?.trim() ||
+  process.env.DATABASE_URL?.trim() ||
+  'postgres://agents:agents@localhost:5432/agents';
+const shellQuote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
+const databaseEnv = `DATABASE_URL=${shellQuote(databaseUrl)}`;
+
 export default defineConfig({
   testDir: './e2e',
   timeout: 30_000,
@@ -11,8 +18,8 @@ export default defineConfig({
   },
   webServer: {
     command: process.env.CI
-      ? 'DATABASE_URL=file:.data/e2e.sqlite pnpm db:migrate && DATABASE_URL=file:.data/e2e.sqlite pnpm build && DATABASE_URL=file:.data/e2e.sqlite pnpm start'
-      : 'DATABASE_URL=file:.data/e2e.sqlite pnpm db:migrate && DATABASE_URL=file:.data/e2e.sqlite pnpm dev',
+      ? `${databaseEnv} pnpm db:migrate && ${databaseEnv} pnpm build && ${databaseEnv} pnpm start`
+      : `${databaseEnv} pnpm db:migrate && ${databaseEnv} pnpm dev`,
     url: 'http://localhost:3000',
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

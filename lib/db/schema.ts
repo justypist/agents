@@ -1,13 +1,13 @@
-import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { pgTable, text, timestamp } from 'drizzle-orm/pg-core';
 
-export const chatSessions = sqliteTable('chat_sessions', {
+export const chatSessions = pgTable('chat_sessions', {
   id: text('id').primaryKey(),
   agentId: text('agent_id').notNull(),
   title: text('title'),
   messages: text('messages').notNull(),
-  archivedAt: integer('archived_at', { mode: 'timestamp_ms' }),
-  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
-  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  archivedAt: timestamp('archived_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull(),
 });
 
 export type ChatSessionRow = typeof chatSessions.$inferSelect;

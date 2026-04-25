@@ -1,11 +1,11 @@
 /** @vitest-environment node */
 
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
-
 import type { UIMessage } from 'ai';
+import { sql } from 'drizzle-orm';
+import postgres from 'postgres';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { chatSessions } from '@/lib/db/schema';
 
 type ChatSessionModule = typeof import('./chat-session');
 type DbModule = typeof import('@/lib/db');
@@ -41,27 +41,34 @@ vi.mock('@/lib/agent-registry', () => ({
   ]),
 }));
 
-let tempDirectory: string | null = null;
 let previousDatabaseUrl: string | undefined;
+let testDatabaseUrl: string;
+let testSchemaName: string | null = null;
+let loadedDbModule: DbModule | null = null;
 
 beforeEach(() => {
   vi.resetModules();
   generatedTitle.mockResolvedValue('Generated title');
-  tempDirectory = mkdtempSync(path.join(tmpdir(), 'agents-chat-session-'));
   previousDatabaseUrl = process.env.DATABASE_URL;
-  process.env.DATABASE_URL = `file:${path.join(tempDirectory, 'test.sqlite')}`;
+  testDatabaseUrl =
+    process.env.TEST_DATABASE_URL?.trim() ||
+    'postgres://agents:agents@localhost:5432/agents';
+  testSchemaName = `chat_session_test_${Date.now()}_${Math.random()
+    .toString(36)
+    .slice(2)}`;
+  process.env.DATABASE_URL = withSearchPath(testDatabaseUrl, testSchemaName);
 });
 
-afterEach(() => {
+afterEach(async () => {
+  await loadedDbModule?.closeDb();
+  loadedDbModule = null;
+
+  await dropTestSchema();
+
   if (previousDatabaseUrl == null) {
     delete process.env.DATABASE_URL;
   } else {
     process.env.DATABASE_URL = previousDatabaseUrl;
-  }
-
-  if (tempDirectory != null) {
-    rmSync(tempDirectory, { recursive: true, force: true });
-    tempDirectory = null;
   }
 });
 
@@ -69,20 +76,23 @@ async function loadModules(): Promise<{
   chatSession: ChatSessionModule;
   db: DbModule;
 }> {
+  await createTestSchema();
+
   const [chatSession, db] = await Promise.all([
     import('./chat-session'),
     import('@/lib/db'),
   ]);
+  loadedDbModule = db;
 
-  await db.getDb().$client.execute(`
+  await db.getDb().execute(sql`
     CREATE TABLE chat_sessions (
       id text PRIMARY KEY NOT NULL,
       agent_id text NOT NULL,
       title text,
       messages text NOT NULL,
-      archived_at integer,
-      created_at integer NOT NULL,
-      updated_at integer NOT NULL
+      archived_at timestamp with time zone,
+      created_at timestamp with time zone NOT NULL,
+      updated_at timestamp with time zone NOT NULL
     )
   `);
 
@@ -101,30 +111,53 @@ async function insertSession(input: {
 }): Promise<void> {
   const now = new Date('2026-01-01T00:00:00.000Z');
 
-  await input.db.$client.execute({
-    sql: `
-      INSERT INTO chat_sessions (
-        id,
-        agent_id,
-        title,
-        messages,
-        archived_at,
-        created_at,
-        updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)
-    `,
-    args: [
-      input.id,
-      input.agentId ?? 'default',
-      input.title ?? null,
+  await input.db.insert(chatSessions).values({
+    id: input.id,
+    agentId: input.agentId ?? 'default',
+    title: input.title ?? null,
+    messages:
       typeof input.messages === 'string'
         ? input.messages
         : JSON.stringify(input.messages),
-      input.archivedAt?.getTime() ?? null,
-      (input.createdAt ?? now).getTime(),
-      (input.updatedAt ?? now).getTime(),
-    ],
+    archivedAt: input.archivedAt ?? null,
+    createdAt: input.createdAt ?? now,
+    updatedAt: input.updatedAt ?? now,
   });
+}
+
+async function createTestSchema(): Promise<void> {
+  if (testSchemaName == null) {
+    return;
+  }
+
+  const admin = postgres(testDatabaseUrl, { max: 1 });
+
+  try {
+    await admin.unsafe(`CREATE SCHEMA IF NOT EXISTS ${testSchemaName}`);
+  } finally {
+    await admin.end();
+  }
+}
+
+async function dropTestSchema(): Promise<void> {
+  if (testSchemaName == null) {
+    return;
+  }
+
+  const admin = postgres(testDatabaseUrl, { max: 1 });
+
+  try {
+    await admin.unsafe(`DROP SCHEMA IF EXISTS ${testSchemaName} CASCADE`);
+  } finally {
+    await admin.end();
+    testSchemaName = null;
+  }
+}
+
+function withSearchPath(databaseUrl: string, schemaName: string): string {
+  const url = new URL(databaseUrl);
+  url.searchParams.set('options', `-c search_path=${schemaName}`);
+  return url.toString();
 }
 
 function textMessage(id: string, text: string, role: UIMessage['role'] = 'user'): UIMessage {

@@ -13,7 +13,7 @@ RUN pnpm install --frozen-lockfile
 
 FROM base AS migrate-deps
 COPY package.json ./
-RUN node -e "const fs = require('node:fs'); const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8')); const getVersion = name => pkg.dependencies?.[name] ?? pkg.devDependencies?.[name]; const dependencies = { '@libsql/client': getVersion('@libsql/client'), 'drizzle-orm': getVersion('drizzle-orm') }; for (const [name, version] of Object.entries(dependencies)) { if (!version) throw new Error('Missing dependency version for ' + name); } fs.writeFileSync('package.json', JSON.stringify({ name: 'migrate-deps', private: true, dependencies }));"
+RUN node -e "const fs = require('node:fs'); const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8')); const getVersion = name => pkg.dependencies?.[name] ?? pkg.devDependencies?.[name]; const dependencies = { 'drizzle-orm': getVersion('drizzle-orm'), postgres: getVersion('postgres') }; for (const [name, version] of Object.entries(dependencies)) { if (!version) throw new Error('Missing dependency version for ' + name); } fs.writeFileSync('package.json', JSON.stringify({ name: 'migrate-deps', private: true, dependencies }));"
 RUN pnpm install --prod
 
 FROM base AS builder

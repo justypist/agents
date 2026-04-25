@@ -1,10 +1,8 @@
 import 'server-only';
 
-import { mkdirSync } from 'node:fs';
-import path from 'node:path';
-import { createClient } from '@libsql/client';
+import postgres from 'postgres';
 
-import { drizzle } from 'drizzle-orm/libsql';
+import { drizzle } from 'drizzle-orm/postgres-js';
 
 import { config } from '@/config';
 import * as schema from '@/lib/db/schema';
@@ -23,29 +21,19 @@ export function getDb() {
 }
 
 function createDb() {
-  const databasePath = toSqliteFilePath(config.database.url);
-
-  ensureDatabaseDirectory(databasePath);
-
-  const client = createClient({
-    url: config.database.url,
+  const client = postgres(config.database.url, {
+    max: 10,
   });
 
   return drizzle({ client, schema });
 }
 
-function ensureDatabaseDirectory(databaseUrl: string): void {
-  const directory = path.dirname(databaseUrl);
-
-  if (directory === '.' || directory.length === 0) {
+export async function closeDb(): Promise<void> {
+  if (databaseInstance == null) {
     return;
   }
 
-  mkdirSync(directory, { recursive: true });
-}
-
-function toSqliteFilePath(databaseUrl: string): string {
-  return databaseUrl.startsWith('file:')
-    ? databaseUrl.slice('file:'.length)
-    : databaseUrl;
+  const database = databaseInstance;
+  databaseInstance = null;
+  await database.$client.end();
 }
