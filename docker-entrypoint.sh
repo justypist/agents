@@ -1,7 +1,6 @@
 #!/bin/sh
 set -eu
 
-mkdir -p /data
 mkdir -p /workspace
 mkdir -p /persist
 

@@ -26,7 +26,7 @@ docker compose -f compose.prod.yaml up -d
 - Docker 部署默认挂载：`/workspace`
 - 可通过 `EXEC_WORKSPACE_PATH` 调整实际目录
 
-生产镜像基于 Debian，容器以 root 用户运行，因此 exec 中可以直接使用 `apt install`。镜像预装 bash、Node.js、pnpm、Python 3、uv、git、jq、sqlite、build-essential 等常用工具。
+生产镜像基于 Debian，容器以 root 用户运行，因此 exec 中可以直接使用 `apt install`。镜像预装 bash、Node.js、pnpm、Python 3、uv、git、jq、build-essential 等常用工具。
 
 注意：`exec` 不是安全沙箱。命令会在应用容器内执行，能访问容器文件系统和进程环境；不要把该能力暴露给不受信任的用户或模型提示。
 

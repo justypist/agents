@@ -12,6 +12,7 @@ const migrationsFolder = path.join(process.cwd(), 'drizzle');
 
 const client = postgres(databaseUrl, {
   max: 1,
+  onnotice: () => {},
 });
 
 const db = drizzle(client);

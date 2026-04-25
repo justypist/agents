@@ -6,7 +6,6 @@ services:
     env_file:
       - .env
     volumes:
-      - data:/data
       - workspace:/workspace
       - persist:/persist
     networks:
@@ -21,7 +20,6 @@ networks:
     external: true
 
 volumes:
-  data:
   workspace:
     name: agents-workspace
   persist:

@@ -63,12 +63,11 @@ RUN rm -f /etc/apt/apt.conf.d/docker-clean \
   procps \
   python3 \
   python3-pip \
-  sqlite3 \
   unzip \
   xz-utils
 RUN mkdir -p /opt/agents/bin \
   && curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/opt/agents/bin sh
-RUN mkdir -p /data /workspace /persist /root /opt/agents/bin /opt/agents/tools /var/cache/apt /var/lib/apt/lists
+RUN mkdir -p /workspace /persist /root /opt/agents/bin /opt/agents/tools /var/cache/apt /var/lib/apt/lists
 COPY --from=builder /app/drizzle ./drizzle
 COPY --from=builder /app/scripts ./scripts
 COPY --from=builder /app/public ./public
