@@ -10,21 +10,38 @@ const openai = createOpenAI({
 const model = {
   chat: openai.responses(config.ai.model.chat),
   small: openai.responses(config.ai.model.small),
-  image: openai.image(config.ai.model.image),
+  image: openai.imageModel(config.ai.model.image),
 };
+
+const serviceTierOptions: OpenAILanguageModelResponsesOptions = {
+  serviceTier: 'priority',
+}
+
+const codexOptions: OpenAILanguageModelResponsesOptions = {
+  store: false,
+}
+
+const chatOptions: OpenAILanguageModelResponsesOptions = {
+  forceReasoning: true,
+  parallelToolCalls: true,
+  textVerbosity: 'medium',
+  reasoningEffort: 'medium',
+  reasoningSummary: 'auto',
+  include: ['reasoning.encrypted_content'],
+}
+
+const commonOpenaiOptions: OpenAILanguageModelResponsesOptions = {
+  ...serviceTierOptions,
+  ...codexOptions,
+}
 
 export const options = {
   chat: {
     model: model.chat,
     providerOptions: {
       openai: {
-        store: false,
-        forceReasoning: true,
-        parallelToolCalls: true,
-        textVerbosity: 'medium',
-        reasoningEffort: 'medium',
-        reasoningSummary: 'auto',
-        include: ['reasoning.encrypted_content'],
+        ...commonOpenaiOptions,
+        ...chatOptions,
       } satisfies OpenAILanguageModelResponsesOptions,
     },
   },
@@ -32,17 +49,17 @@ export const options = {
     model: model.small,
     providerOptions: {
       openai: {
-        store: false,
-        forceReasoning: true,
-        parallelToolCalls: true,
-        textVerbosity: 'medium',
-        reasoningEffort: 'medium',
-        reasoningSummary: 'auto',
-        include: ['reasoning.encrypted_content'],
+        ...commonOpenaiOptions,
+        ...chatOptions,
       } satisfies OpenAILanguageModelResponsesOptions,
     },
   },
   image: {
     model: model.image,
+    providerOptions: {
+      openai: {
+        ...commonOpenaiOptions,
+      } satisfies OpenAILanguageModelResponsesOptions,
+    },
   },
 };
