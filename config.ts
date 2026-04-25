@@ -3,14 +3,10 @@ import { loadEnvConfig } from '@next/env';
 const projectDir = process.cwd();
 loadEnvConfig(projectDir);
 
-type AIMethod = 'responses' | 'chat-completions';
-
 export const config = {
   ai: {
     baseUrl: process.env.AI_BASE_URL?.trim() || 'https://api.openai.com/v1',
     apiKey: process.env.AI_API_KEY?.trim() || 'sk-xxx',
-    method: (process.env.AI_API_METHOD?.trim().toLowerCase() ||
-      'responses') as AIMethod,
     model: {
       chat: process.env.AI_MODEL_CHAT?.trim() || 'gpt-5.5',
       small: process.env.AI_MODEL_SMALL?.trim() || 'gpt-5.4-mini',
