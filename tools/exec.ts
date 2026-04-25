@@ -1,13 +1,13 @@
 import { jsonSchema, tool } from 'ai';
 
 import {
+  mapVirtualWorkspaceReferences,
   normalizeWorkspacePath,
-  runSandboxCommand,
-  SANDBOX_CONTAINER,
-  SANDBOX_IMAGE,
-  SANDBOX_NETWORK,
-  toSandboxPath,
-} from '@/lib/exec-sandbox';
+  runLocalShellCommand,
+  toVirtualWorkspacePath,
+  toWorkspacePath,
+  virtualizeWorkspaceText,
+} from '@/lib/exec-runtime';
 
 const DEFAULT_TIMEOUT_MS = 20_000;
 const MAX_TIMEOUT_MS = 60_000;
@@ -22,12 +22,7 @@ type execInput = {
 type execResult = {
   command: string;
   cwd: string;
-  sandbox: {
-    container: string;
-    image: string;
-    cwd: string;
-    network: string;
-  };
+  workspace: string;
   exitCode: number | null;
   signal: NodeJS.Signals | null;
   timedOut: boolean;
@@ -83,46 +78,34 @@ function normalizeTimeout(timeoutMs?: number): number {
   return Math.min(Math.max(Math.floor(timeoutMs), 1_000), MAX_TIMEOUT_MS);
 }
 
-function resolveSandboxWorkingDirectory(cwd?: string): string {
-  return toSandboxPath(normalizeWorkspacePath(cwd));
+function resolveWorkingDirectory(cwd?: string): string {
+  return toWorkspacePath(normalizeWorkspacePath(cwd));
 }
 
 export const exec = tool({
   description:
-    '在持久 Docker 沙箱内执行 shell 命令，适合读写文件、安装依赖、运行构建、调用 CLI；不会直接在应用容器或宿主机执行',
+    '在当前运行环境的持久 /workspace 中执行 shell 命令；不是安全沙箱，适合受信任场景下读写文件、安装依赖、运行构建、调用 CLI',
   inputSchema: execInputSchema,
   execute: async input => {
     const command = normalizeCommand(input.command);
-    const sandboxCwd = resolveSandboxWorkingDirectory(input.cwd);
+    const cwd = resolveWorkingDirectory(input.cwd);
+    const workspacePath = normalizeWorkspacePath(input.cwd);
     const timeoutMs = normalizeTimeout(input.timeoutMs);
-    const timeoutSeconds = String(Math.max(1, Math.ceil(timeoutMs / 1_000)));
 
-    const result = await runSandboxCommand(
-      [
-        'timeout',
-        '--kill-after=2s',
-        `${timeoutSeconds}s`,
-        'bash',
-        '-lc',
-        command,
-      ],
-      { cwd: sandboxCwd, timeoutMs: timeoutMs + 5_000 },
-    );
+    const result = await runLocalShellCommand(mapVirtualWorkspaceReferences(command), {
+      cwd,
+      timeoutMs,
+    });
 
     return {
       command,
-      cwd: sandboxCwd,
-      sandbox: {
-        container: SANDBOX_CONTAINER,
-        image: SANDBOX_IMAGE,
-        cwd: sandboxCwd,
-        network: SANDBOX_NETWORK,
-      },
+      cwd: toVirtualWorkspacePath(workspacePath),
+      workspace: '/workspace',
       exitCode: result.exitCode,
       signal: result.signal,
-      timedOut: result.timedOut || result.exitCode === 124,
-      stdout: truncateOutput(result.stdout),
-      stderr: truncateOutput(result.stderr),
+      timedOut: result.timedOut,
+      stdout: truncateOutput(virtualizeWorkspaceText(result.stdout)),
+      stderr: truncateOutput(virtualizeWorkspaceText(result.stderr)),
     } satisfies execResult;
   },
 });

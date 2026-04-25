@@ -1,15 +1,13 @@
-import { randomUUID } from 'node:crypto';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import os from 'node:os';
+import { constants } from 'node:fs';
+import { lstat, mkdir, open, readdir, realpath } from 'node:fs/promises';
 import path from 'node:path';
 
 import {
+  ensureWorkspaceRoot,
   normalizeWorkspacePath,
-  runDockerCommand,
-  runSandboxCommand,
-  SANDBOX_CONTAINER,
-  toSandboxPath,
-} from '@/lib/exec-sandbox';
+  toWorkspacePath,
+  WORKSPACE_ROOT,
+} from '@/lib/exec-runtime';
 
 export type WorkspaceFileType = 'file' | 'directory' | 'other';
 
@@ -33,132 +31,153 @@ export type WorkspaceDownload = {
   content: Buffer;
 };
 
-const LIST_SCRIPT = String.raw`
-import json
-import os
-import sys
-
-root = "/workspace"
-rel = sys.argv[1]
-target = os.path.normpath(os.path.join(root, rel))
-
-if os.path.commonpath([root, target]) != root:
-    raise SystemExit("path escapes workspace")
-
-def relpath(value):
-    result = os.path.relpath(value, root)
-    return "" if result == "." else result
-
-def item(value):
-    stat = os.lstat(value)
-    if os.path.isdir(value):
-        kind = "directory"
-    elif os.path.isfile(value):
-        kind = "file"
-    else:
-        kind = "other"
-    return {
-        "name": os.path.basename(value) or "workspace",
-        "path": relpath(value),
-        "type": kind,
-        "size": stat.st_size,
-        "modifiedAt": stat.st_mtime,
-    }
-
-if not os.path.exists(target):
-    raise SystemExit("not found")
-
-current = item(target)
-children = []
-
-if os.path.isdir(target):
-    for name in sorted(os.listdir(target), key=lambda value: value.lower()):
-        children.append(item(os.path.join(target, name)))
-
-print(json.dumps({"item": current, "children": children}))
-`;
-
-function toIsoTime(value: unknown): string {
-  if (typeof value !== 'number' || Number.isNaN(value)) {
-    return new Date(0).toISOString();
-  }
-
-  return new Date(value * 1000).toISOString();
+function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && 'code' in error;
 }
 
-function isRawWorkspaceItem(value: unknown): value is {
-  name: string;
-  path: string;
-  type: WorkspaceFileType;
-  size: number;
-  modifiedAt: number;
-} {
-  if (typeof value !== 'object' || value == null) {
-    return false;
-  }
+function isInsidePath(root: string, value: string): boolean {
+  const relativePath = path.relative(root, value);
 
-  const candidate = value as Record<string, unknown>;
-
-  return (
-    typeof candidate.name === 'string' &&
-    typeof candidate.path === 'string' &&
-    (candidate.type === 'file' ||
-      candidate.type === 'directory' ||
-      candidate.type === 'other') &&
-    typeof candidate.size === 'number' &&
-    typeof candidate.modifiedAt === 'number'
+  return relativePath === '' || (
+    !relativePath.startsWith('..') && !path.isAbsolute(relativePath)
   );
 }
 
-function toWorkspaceItem(value: unknown): WorkspaceFileItem {
-  if (!isRawWorkspaceItem(value)) {
-    throw new Error('Invalid workspace item response.');
+async function getWorkspaceRealPath(): Promise<string> {
+  await ensureWorkspaceRoot();
+
+  return await realpath(WORKSPACE_ROOT);
+}
+
+async function assertExistingWorkspacePath(absolutePath: string): Promise<void> {
+  const workspaceRealPath = await getWorkspaceRealPath();
+  const targetRealPath = await realpath(absolutePath);
+
+  if (!isInsidePath(workspaceRealPath, targetRealPath)) {
+    throw new Error('workspace path 必须位于 /workspace 内');
+  }
+}
+
+async function assertCreatableWorkspacePath(absolutePath: string): Promise<void> {
+  const workspaceRealPath = await getWorkspaceRealPath();
+  let currentPath = absolutePath;
+
+  while (true) {
+    try {
+      const targetRealPath = await realpath(currentPath);
+
+      if (!isInsidePath(workspaceRealPath, targetRealPath)) {
+        throw new Error('workspace path 必须位于 /workspace 内');
+      }
+
+      return;
+    } catch (error) {
+      if (!isNodeError(error) || error.code !== 'ENOENT') {
+        throw error;
+      }
+
+      const parentPath = path.dirname(currentPath);
+
+      if (parentPath === currentPath) {
+        throw error;
+      }
+
+      currentPath = parentPath;
+    }
+  }
+}
+
+async function writeWorkspaceFile(absolutePath: string, content: Buffer): Promise<void> {
+  const existingStat = await lstat(absolutePath).catch((error: unknown) => {
+    if (isNodeError(error) && error.code === 'ENOENT') {
+      return null;
+    }
+
+    throw error;
+  });
+
+  if (existingStat?.isSymbolicLink()) {
+    throw new Error('workspace path 不能是符号链接');
   }
 
+  const file = await open(
+    absolutePath,
+    constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | constants.O_NOFOLLOW,
+  );
+
+  try {
+    await file.writeFile(content);
+  } finally {
+    await file.close();
+  }
+}
+
+async function readWorkspaceFile(absolutePath: string): Promise<Buffer> {
+  const file = await open(absolutePath, constants.O_RDONLY | constants.O_NOFOLLOW);
+
+  try {
+    return await file.readFile();
+  } finally {
+    await file.close();
+  }
+}
+
+async function toWorkspaceItem(value: string, workspacePath: string): Promise<WorkspaceFileItem> {
+  const stat = await lstat(value);
+  const type: WorkspaceFileType = stat.isDirectory()
+    ? 'directory'
+    : stat.isFile()
+      ? 'file'
+      : 'other';
+
   return {
-    name: value.name,
-    path: value.path,
-    type: value.type,
-    size: value.size,
-    modifiedAt: toIsoTime(value.modifiedAt),
+    name: path.basename(value) || 'workspace',
+    path: workspacePath,
+    type,
+    size: stat.size,
+    modifiedAt: stat.mtime.toISOString(),
   };
 }
 
-function parseListing(value: string, requestedPath: string): WorkspaceListing {
-  const payload = JSON.parse(value) as Record<string, unknown>;
-  const item = toWorkspaceItem(payload.item);
-  const rawChildren = Array.isArray(payload.children) ? payload.children : [];
+function getParentPath(requestedPath: string): string | null {
   const parentPath = requestedPath.includes('/')
     ? requestedPath.split('/').slice(0, -1).join('/')
     : requestedPath.length > 0
       ? ''
       : null;
 
-  return {
-    path: requestedPath,
-    parentPath,
-    item,
-    children: rawChildren.map(toWorkspaceItem),
-  };
+  return parentPath;
 }
 
 export async function listWorkspaceFiles(
   requestedPath: string | null | undefined,
 ): Promise<WorkspaceListing> {
   const workspacePath = normalizeWorkspacePath(requestedPath);
+  const absolutePath = toWorkspacePath(workspacePath);
 
-  const result = await runSandboxCommand([
-    'python3',
-    '-c',
-    LIST_SCRIPT,
-    workspacePath,
-  ]);
+  await assertExistingWorkspacePath(absolutePath);
 
-  if (result.exitCode !== 0) {
-    throw new Error(result.stderr.trim() || result.stdout.trim() || '读取 workspace 失败');
-  }
+  const item = await toWorkspaceItem(absolutePath, workspacePath);
+  const children = item.type === 'directory'
+    ? await Promise.all(
+        (await readdir(absolutePath))
+          .sort((left, right) => left.localeCompare(right, undefined, { sensitivity: 'base' }))
+          .map(childName => {
+            const childWorkspacePath = path.posix.join(workspacePath, childName);
+            return toWorkspaceItem(
+              toWorkspacePath(childWorkspacePath),
+              childWorkspacePath,
+            );
+          }),
+      )
+    : [];
 
-  return parseListing(result.stdout, workspacePath);
+  return {
+    path: workspacePath,
+    parentPath: getParentPath(workspacePath),
+    item,
+    children,
+  };
 }
 
 export async function uploadWorkspaceFile(
@@ -172,40 +191,19 @@ export async function uploadWorkspaceFile(
     throw new Error('文件名无效');
   }
 
-  const mkdir = await runSandboxCommand([
-    'mkdir',
-    '-p',
-    toSandboxPath(workspaceDirectory),
-  ]);
+  const absoluteDirectory = toWorkspacePath(workspaceDirectory);
+  await assertCreatableWorkspacePath(absoluteDirectory);
+  await mkdir(absoluteDirectory, { recursive: true });
+  await assertExistingWorkspacePath(absoluteDirectory);
 
-  if (mkdir.exitCode !== 0) {
-    throw new Error(mkdir.stderr.trim() || '创建 workspace 目录失败');
-  }
+  const targetWorkspacePath = path.posix.join(workspaceDirectory, safeFilename);
+  const absoluteTargetPath = toWorkspacePath(targetWorkspacePath);
+  await assertCreatableWorkspacePath(path.dirname(absoluteTargetPath));
+  await writeWorkspaceFile(absoluteTargetPath, Buffer.from(await file.arrayBuffer()));
 
-  const tempDirectory = await mkdtemp(path.join(os.tmpdir(), 'workspace-upload-'));
-  const tempFile = path.join(tempDirectory, `${randomUUID()}-${safeFilename}`);
+  const listing = await listWorkspaceFiles(targetWorkspacePath);
 
-  try {
-    await writeFile(tempFile, Buffer.from(await file.arrayBuffer()));
-
-    const copy = await runDockerCommand([
-      'cp',
-      tempFile,
-      `${SANDBOX_CONTAINER}:${toSandboxPath(path.posix.join(workspaceDirectory, safeFilename))}`,
-    ]);
-
-    if (copy.exitCode !== 0) {
-      throw new Error(copy.stderr.trim() || '上传文件到 workspace 失败');
-    }
-
-    const listing = await listWorkspaceFiles(
-      path.posix.join(workspaceDirectory, safeFilename),
-    );
-
-    return listing.item;
-  } finally {
-    await rm(tempDirectory, { force: true, recursive: true });
-  }
+  return listing.item;
 }
 
 export async function downloadWorkspaceFile(
@@ -223,26 +221,10 @@ export async function downloadWorkspaceFile(
     throw new Error('仅支持下载文件');
   }
 
-  const tempDirectory = await mkdtemp(path.join(os.tmpdir(), 'workspace-download-'));
   const filename = path.basename(workspacePath);
-  const localPath = path.join(tempDirectory, filename);
 
-  try {
-    const copy = await runDockerCommand([
-      'cp',
-      `${SANDBOX_CONTAINER}:${toSandboxPath(workspacePath)}`,
-      localPath,
-    ]);
-
-    if (copy.exitCode !== 0) {
-      throw new Error(copy.stderr.trim() || '从 workspace 下载文件失败');
-    }
-
-    return {
-      filename,
-      content: await readFile(localPath),
-    };
-  } finally {
-    await rm(tempDirectory, { force: true, recursive: true });
-  }
+  return {
+    filename,
+    content: await readWorkspaceFile(toWorkspacePath(workspacePath)),
+  };
 }

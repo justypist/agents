@@ -15,24 +15,31 @@ cp .env.example .env
 docker compose -f compose.prod.yaml up -d
 ```
 
-生产 compose 会同时启动应用容器和 exec 沙箱容器，沙箱镜像需先通过 build 步骤构建。生产镜像启动时会自动执行数据库迁移。
+生产 compose 只启动应用容器。`exec` 直接在应用容器内运行命令，生产镜像启动时会自动执行数据库迁移。
 
-### exec 沙箱
+### exec workspace
 
-`exec` 工具不会直接在应用容器内运行命令，而是通过挂载的 Docker socket 创建并复用一个持久容器。
+`exec` 工具在当前运行环境内执行命令，并将工作目录限制在持久 workspace 中。
 
-- 默认容器名：`agents-exec-sandbox`
-- 默认镜像：`agents-exec-sandbox:latest`
 - 默认工作目录：`/workspace`
-- 默认网络：`bridge`
-- workspace volume：`agents-exec-workspace`
-- home volume：`agents-exec-home`
+- 本地默认目录：`.data/workspace`
+- Docker 部署默认挂载：`/workspace`
+- 可通过 `EXEC_WORKSPACE_PATH` 调整实际目录
 
-沙箱镜像由 `Dockerfile.exec-sandbox` 构建，预装 Node.js Current、最新 pnpm、Python 3.14、uv、git、jq、sqlite3、build-essential 等常用工具。容器会被保留，系统或应用重启后会重新 `start`，因此容器 writable layer、`/workspace` 和 `/home/agent` 里的内容都会继续存在。需要调整镜像、网络或 volume 时，修改 `Dockerfile.exec-sandbox` 或 `config.ts` 里的 `execSandbox`，重新构建镜像，并删除旧沙箱容器让它按新配置重建：
+生产镜像基于 Debian，容器以 root 用户运行，因此 exec 中可以直接使用 `apt install`。镜像预装 bash、Node.js、pnpm、Python 3、uv、git、jq、sqlite、build-essential 等常用工具。
 
-```shell
-docker rm -f agents-exec-sandbox
-```
+注意：`exec` 不是安全沙箱。命令会在应用容器内执行，能访问容器文件系统和进程环境；不要把该能力暴露给不受信任的用户或模型提示。
+
+`compose.prod.yaml` 只挂载一个 exec 持久化卷到 `/persist`，启动时会把常用目录软链到其中，并通过环境变量把主流工具缓存指向 `/persist`：
+
+- `/workspace`：agent 工作区，独立持久化
+- `/root` -> `/persist/home`：root home、CLI 配置和用户级缓存
+- `/opt/agents/bin` -> `/persist/bin`：exec 下载的可执行文件，已加入 `PATH`
+- `/opt/agents/tools` -> `/persist/tools`：exec 下载的工具目录
+- `/var/cache/apt`、`/var/lib/apt/lists` -> `/persist/apt/*`：apt 下载缓存和索引
+- npm、pnpm、pip、uv、cargo、rustup、go、composer、maven、gradle、dotnet、playwright、huggingface 等缓存和全局工具目录会落到 `/persist/*`
+
+注意：apt 安装到系统目录的文件属于容器 writable layer，容器不重建时会保留；如果重新创建容器，通常需要重新执行 `apt install`，但会复用已缓存的 apt 包和索引，避免重复下载。
 
 ## API
 

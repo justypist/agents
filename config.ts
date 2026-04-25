@@ -38,11 +38,8 @@ export const config = {
     bucket: process.env.OSS_BUCKET?.trim() || 'agents',
     region: process.env.OSS_REGION?.trim() || 'auto',
   },
-  execSandbox: {
-    container: 'agents-exec-sandbox',
-    image: 'agents-exec-sandbox:latest',
-    network: 'bridge',
-    workspaceVolume: 'agents-exec-workspace',
-    homeVolume: 'agents-exec-home',
+  exec: {
+    workspacePath:
+      process.env.EXEC_WORKSPACE_PATH?.trim() || '.data/workspace',
   },
 };

@@ -272,14 +272,14 @@ export function WorkspaceBrowser() {
                 ← 返回 agents
               </Link>
               <p className="mt-8 font-mono text-xs uppercase tracking-[0.3em] text-muted-foreground">
-                Docker Workspace
+                Workspace
               </p>
               <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-5xl">
-                沙箱文件柜
+                Workspace 文件柜
               </h1>
               <p className="mt-4 max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base">
-                查看持久 Docker workspace 中的文件。这里的内容来自 exec
-                沙箱容器的 <span className="font-mono text-foreground">/workspace</span>。
+                查看持久 workspace 中的文件。这里的内容来自当前运行环境的{' '}
+                <span className="font-mono text-foreground">/workspace</span>。
               </p>
             </div>
 
