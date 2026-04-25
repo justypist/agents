@@ -11,7 +11,11 @@ export const config = {
     apiKey: process.env.AI_API_KEY?.trim() || 'sk-xxx',
     method: (process.env.AI_API_METHOD?.trim().toLowerCase() ||
       'responses') as AIMethod,
-    model: process.env.AI_MODEL?.trim() || 'gpt-5.4',
+    model: {
+      chat: process.env.AI_MODEL_CHAT?.trim() || 'gpt-5.5',
+      small: process.env.AI_MODEL_SMALL?.trim() || 'gpt-5.4-mini',
+      image: process.env.AI_MODEL_IMAGE?.trim() || 'gpt-image-2',
+    },
   },
   database: {
     url: process.env.DATABASE_URL?.trim() || 'file:.data/agents.sqlite',

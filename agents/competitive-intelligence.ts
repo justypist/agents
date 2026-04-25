@@ -29,7 +29,7 @@ export const competitiveIntelligenceInstructions = [
 ].join('\n');
 
 export const agent = new ToolLoopAgent({
-  ...options,
+  ...options.chat,
   instructions: competitiveIntelligenceInstructions,
   stopWhen: [stepCountIs(48)],
   tools: {

@@ -17,7 +17,7 @@ export const defaultAgentInstructions = [
 ].join('\n');
 
 export const agent = new ToolLoopAgent({
-  ...options,
+  ...options.chat,
   instructions: defaultAgentInstructions,
   stopWhen: [stepCountIs(128)],
   tools: {

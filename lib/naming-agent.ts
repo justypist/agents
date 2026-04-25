@@ -23,7 +23,7 @@ export async function generateChatSessionTitle(
 
   try {
     const { text } = streamText({
-      ...options,
+      ...options.small,
       prompt: [namingAgentInstructions, '', conversation].join('\n'),
       maxOutputTokens: 32,
     });
