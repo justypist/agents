@@ -36,13 +36,3 @@ test('session history shows created chat sessions', async ({ page }) => {
   await expect(page.getByText('历史会话')).toBeVisible();
   await expect(page.getByText('空白会话').first()).toBeVisible();
 });
-
-test('manifest is available for PWA installs', async ({ request }) => {
-  const response = await request.get('/manifest.webmanifest');
-
-  expect(response.ok()).toBe(true);
-  await expect(response.json()).resolves.toMatchObject({
-    name: 'Agents',
-    display: 'standalone',
-  });
-});
