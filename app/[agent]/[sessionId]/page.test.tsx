@@ -8,6 +8,7 @@ import type { StoredChatSession } from '@/lib/chat-session';
 import ChatSessionPage from './page';
 import { getAgentByRouteSegment } from '@/lib/agent-registry';
 import { getChatSession } from '@/lib/chat-session';
+import { listSkills } from '@/lib/skills';
 import { notFound } from 'next/navigation';
 
 vi.mock('next/navigation', () => ({
@@ -24,6 +25,10 @@ vi.mock('@/lib/chat-session', () => ({
   getChatSession: vi.fn(),
 }));
 
+vi.mock('@/lib/skills', () => ({
+  listSkills: vi.fn(),
+}));
+
 vi.mock('@/components/chat/chat-page', () => ({
   ChatPage: (props: {
     agentId: string;
@@ -31,6 +36,7 @@ vi.mock('@/components/chat/chat-page', () => ({
     initialMessages: UIMessage[];
     initialTitle: string | null;
     fallbackTitle: string;
+    initialSkills: unknown[];
   }) => (
     <main data-testid="chat-page">
       {props.agentId} {props.sessionId} {props.initialTitle ?? props.fallbackTitle}{' '}
@@ -67,6 +73,7 @@ describe('Chat session page', () => {
   beforeEach(() => {
     vi.mocked(getAgentByRouteSegment).mockResolvedValue(resolvedAgent);
     vi.mocked(getChatSession).mockResolvedValue(session);
+    vi.mocked(listSkills).mockResolvedValue([]);
   });
 
   it('returns not found for unknown agents', async () => {

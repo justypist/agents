@@ -26,12 +26,20 @@ export default async function Home() {
             首页展示当前已注册的 agent。点击任一入口后，会自动创建会话并进入对应页面。
           </p>
         </div>
-        <Link
-          href="/workspace"
-          className="inline-flex border border-border px-4 py-2 text-sm transition hover:border-border-strong hover:bg-muted"
-        >
-          查看 Workspace
-        </Link>
+        <div className="flex flex-wrap gap-3">
+          <Link
+            href="/skills"
+            className="inline-flex border border-border px-4 py-2 text-sm transition hover:border-border-strong hover:bg-muted"
+          >
+            管理 Skills
+          </Link>
+          <Link
+            href="/workspace"
+            className="inline-flex border border-border px-4 py-2 text-sm transition hover:border-border-strong hover:bg-muted"
+          >
+            查看 Workspace
+          </Link>
+        </div>
       </div>
 
       <div className="mt-10 grid gap-4 sm:grid-cols-2">

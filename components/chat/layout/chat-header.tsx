@@ -9,7 +9,10 @@ import { getStatusLabel } from '../helpers';
 type ChatHeaderProps = {
   isCreatingSession?: boolean;
   isRegeneratingTitle?: boolean;
+  isSelectingMessages?: boolean;
   onCreateSession?: () => void;
+  onStartCreateSkill?: () => void;
+  onStartAdjustSkill?: () => void;
   onRegenerateTitle?: () => void;
   status: string;
   title: string;
@@ -18,7 +21,10 @@ type ChatHeaderProps = {
 export function ChatHeader({
   isCreatingSession = false,
   isRegeneratingTitle = false,
+  isSelectingMessages = false,
   onCreateSession,
+  onStartCreateSkill,
+  onStartAdjustSkill,
   onRegenerateTitle,
   status,
   title,
@@ -52,6 +58,29 @@ export function ChatHeader({
         </div>
 
         <div className="flex items-center gap-3">
+          <Link
+            href="/skills"
+            className="hidden h-8 items-center border border-border bg-background px-3 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:inline-flex"
+          >
+            Skills
+          </Link>
+
+          <button
+            type="button"
+            onClick={onStartCreateSkill}
+            className="hidden h-8 items-center border border-border bg-background px-3 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground md:inline-flex"
+          >
+            {isSelectingMessages ? '选择中' : '沉淀 Skill'}
+          </button>
+
+          <button
+            type="button"
+            onClick={onStartAdjustSkill}
+            className="hidden h-8 items-center border border-border bg-background px-3 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground md:inline-flex"
+          >
+            调整 Skill
+          </button>
+
           <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
             {isBusy ? <LoadingSpinner className="h-3 w-3" /> : null}
             {getStatusLabel(status)}
