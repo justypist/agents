@@ -54,18 +54,6 @@ export const TextPart = memo(function TextPart({ text, state }: TextPartProps) {
         dir="auto"
         mode={state === 'streaming' ? 'streaming' : 'static'}
         urlTransform={chatMarkdownUrlTransform}
-        isAnimating={state === 'streaming'}
-        animated={
-          state === 'streaming'
-            ? {
-                animation: 'blurIn',
-                sep: 'word',
-                duration: 360,
-                stagger: 28,
-                easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
-              }
-            : false
-        }
         className={[
           'text-foreground',
           '[&>blockquote]:border-l',
