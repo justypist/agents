@@ -73,7 +73,11 @@ const toUIMessageStreamResponse = vi.fn(
     return new Response('stream', { status: 202 });
   },
 );
-const agentStream = vi.fn(async () => ({ toUIMessageStreamResponse }));
+const toUIMessageStream = vi.fn(() => new ReadableStream());
+const agentStream = vi.fn(async () => ({
+  toUIMessageStream,
+  toUIMessageStreamResponse,
+}));
 const resolvedAgent: RegisteredAgent = {
   id: 'default',
   displayName: 'Agents',
@@ -92,6 +96,7 @@ describe('streamChatSessionTurn', () => {
     vi.mocked(getEnabledSkillByName).mockResolvedValue(null);
     vi.mocked(saveChatSessionMessages).mockResolvedValue(undefined);
     toUIMessageStreamResponse.mockClear();
+    toUIMessageStream.mockClear();
     agentStream.mockClear();
   });
 

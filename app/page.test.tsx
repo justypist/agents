@@ -47,6 +47,7 @@ const agents: RegisteredAgent[] = [
     routeSegment: 'default',
     agent: {
       stream: async () => ({
+        toUIMessageStream: () => new ReadableStream(),
         toUIMessageStreamResponse: () => new Response(null),
       }),
     },
@@ -57,6 +58,7 @@ const agents: RegisteredAgent[] = [
     routeSegment: 'competitive-intelligence',
     agent: {
       stream: async () => ({
+        toUIMessageStream: () => new ReadableStream(),
         toUIMessageStreamResponse: () => new Response(null),
       }),
     },

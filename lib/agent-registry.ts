@@ -13,6 +13,7 @@ export type AgentStreamInput = {
 type StreamableAgent = {
   tools?: ToolSet;
   stream: (input: AgentStreamInput) => Promise<{
+    toUIMessageStream: (options?: Record<string, unknown>) => ReadableStream;
     toUIMessageStreamResponse: (options?: Record<string, unknown>) => Response;
   }>;
 };

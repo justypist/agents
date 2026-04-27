@@ -32,6 +32,7 @@ const resolvedAgent: RegisteredAgent = {
   routeSegment: 'default',
   agent: {
     stream: async () => ({
+      toUIMessageStream: () => new ReadableStream(),
       toUIMessageStreamResponse: () => new Response(null),
     }),
   },

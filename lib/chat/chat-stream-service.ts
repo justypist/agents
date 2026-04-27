@@ -10,7 +10,7 @@ import {
 } from 'ai';
 
 import { jsonError } from '@/lib/api/responses';
-import { resolveRequestedAgent } from '@/lib/agent-registry';
+import { resolveRequestedAgent, type RegisteredAgent } from '@/lib/agent-registry';
 import { getChatSession, saveChatSessionMessages } from '@/lib/chat-session';
 import { parseSkillInvocationPrefix } from '@/lib/chat/skill-invocation';
 import { getEnabledSkillByName, type Skill } from '@/lib/skills';
@@ -19,6 +19,44 @@ const generateMessageId = createIdGenerator({
   prefix: 'msg',
   size: 16,
 });
+
+type AgentStreamResult = Awaited<ReturnType<RegisteredAgent['agent']['stream']>>;
+
+type PreparedAgentTurn = {
+  validatedMessages: UIMessage[];
+  streamResult: AgentStreamResult;
+};
+
+type PrepareAgentTurnResult = PreparedAgentTurn | Response;
+
+export async function generateAgentReplyMessages(input: {
+  agent: RegisteredAgent['agent'];
+  messages: UIMessage[];
+}): Promise<UIMessage[]> {
+  const preparedTurn = await prepareAgentTurn(input);
+
+  if (preparedTurn instanceof Response) {
+    throw new Error('Agent reply preparation failed.');
+  }
+
+  let finishedMessages: UIMessage[] | null = null;
+  const stream = preparedTurn.streamResult.toUIMessageStream({
+    originalMessages: preparedTurn.validatedMessages,
+    generateMessageId,
+    sendReasoning: true,
+    onFinish: (event: { messages: UIMessage[] }) => {
+      finishedMessages = event.messages;
+    },
+  });
+
+  await consumeStream({ stream });
+
+  if (finishedMessages == null) {
+    throw new Error('Agent reply finished without messages.');
+  }
+
+  return finishedMessages;
+}
 
 export async function streamChatSessionTurn(input: {
   agentId: string;
@@ -47,6 +85,35 @@ export async function streamChatSessionTurn(input: {
     return jsonError('Session does not belong to agentId', 400);
   }
 
+  const preparedTurn = await prepareAgentTurn({
+    agent: resolvedAgent.agent,
+    messages: input.messages,
+    abortSignal: input.abortSignal,
+  });
+
+  if (preparedTurn instanceof Response) {
+    return preparedTurn;
+  }
+
+  return preparedTurn.streamResult.toUIMessageStreamResponse({
+    originalMessages: preparedTurn.validatedMessages,
+    generateMessageId,
+    sendReasoning: true,
+    consumeSseStream: consumeStream,
+    onFinish: async (event: { messages: UIMessage[] }) => {
+      await saveChatSessionMessages({
+        sessionId: input.sessionId,
+        messages: event.messages,
+      });
+    },
+  });
+}
+
+async function prepareAgentTurn(input: {
+  agent: RegisteredAgent['agent'];
+  messages: UIMessage[];
+  abortSignal?: AbortSignal;
+}): Promise<PrepareAgentTurnResult> {
   const validatedMessages = await validateUIMessages({
     messages: input.messages,
   });
@@ -62,23 +129,14 @@ export async function streamChatSessionTurn(input: {
     skillInvocation.skill,
     skillInvocation.taskText,
   );
-  const result = await resolvedAgent.agent.stream({
-    messages: messagesWithSkill,
-    abortSignal: input.abortSignal,
-  });
 
-  return result.toUIMessageStreamResponse({
-    originalMessages: validatedMessages,
-    generateMessageId,
-    sendReasoning: true,
-    consumeSseStream: consumeStream,
-    onFinish: async (event: { messages: UIMessage[] }) => {
-      await saveChatSessionMessages({
-        sessionId: input.sessionId,
-        messages: event.messages,
-      });
-    },
-  });
+  return {
+    validatedMessages,
+    streamResult: await input.agent.stream({
+      messages: messagesWithSkill,
+      abortSignal: input.abortSignal,
+    }),
+  };
 }
 
 async function resolveSkillInvocation(messages: UIMessage[]): Promise<

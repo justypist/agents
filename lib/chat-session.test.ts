@@ -22,21 +22,23 @@ vi.mock('@/lib/agent-registry', () => ({
       id: 'default',
       displayName: 'Agents',
       routeSegment: 'default',
-      agent: {
-        stream: async () => ({
-          toUIMessageStreamResponse: () => new Response(null),
-        }),
-      },
+        agent: {
+          stream: async () => ({
+            toUIMessageStream: () => new ReadableStream(),
+            toUIMessageStreamResponse: () => new Response(null),
+          }),
+        },
     },
     {
       id: 'other',
       displayName: 'Other',
       routeSegment: 'other',
-      agent: {
-        stream: async () => ({
-          toUIMessageStreamResponse: () => new Response(null),
-        }),
-      },
+        agent: {
+          stream: async () => ({
+            toUIMessageStream: () => new ReadableStream(),
+            toUIMessageStreamResponse: () => new Response(null),
+          }),
+        },
     },
   ]),
 }));
