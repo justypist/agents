@@ -2,13 +2,16 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { PATCH } from './route';
+import { GET, PATCH } from './route';
 import {
+  getChatSession,
   regenerateChatSessionTitle,
   setChatSessionArchived,
+  type StoredChatSession,
 } from '@/lib/chat-session';
 
 vi.mock('@/lib/chat-session', () => ({
+  getChatSession: vi.fn(),
   regenerateChatSessionTitle: vi.fn(),
   setChatSessionArchived: vi.fn(),
 }));
@@ -23,6 +26,62 @@ function patchJson(body: unknown): Request {
 const context = {
   params: Promise.resolve({ sessionId: 'session-1' }),
 };
+
+const baseSession: StoredChatSession = {
+  id: 'session-1',
+  agentId: 'default',
+  title: null,
+  messages: [
+    {
+      id: 'message-1',
+      role: 'user',
+      parts: [{ type: 'text', text: 'hello' }],
+    },
+  ],
+  turnState: {
+    status: 'idle',
+    currentUserMessageId: null,
+    errorSummary: null,
+    updatedAt: null,
+  },
+};
+
+describe('GET /api/sessions/[sessionId]', () => {
+  it.each([
+    ['running', 'message-1', null],
+    ['completed', 'message-1', null],
+    ['failed', 'message-1', 'model unavailable'],
+  ] as const)('returns %s session snapshots', async (
+    status,
+    currentUserMessageId,
+    errorSummary,
+  ) => {
+    const session: StoredChatSession = {
+      ...baseSession,
+      turnState: {
+        status,
+        currentUserMessageId,
+        errorSummary,
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+    };
+    vi.mocked(getChatSession).mockResolvedValue(session);
+
+    const response = await GET(new Request('http://localhost/api/sessions/session-1'), context);
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ session });
+  });
+
+  it('returns 404 for missing sessions', async () => {
+    vi.mocked(getChatSession).mockResolvedValue(null);
+
+    const response = await GET(new Request('http://localhost/api/sessions/missing'), context);
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({ error: 'Unknown sessionId' });
+  });
+});
 
 describe('PATCH /api/sessions/[sessionId]', () => {
   beforeEach(() => {
