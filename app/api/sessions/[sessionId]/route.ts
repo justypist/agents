@@ -1,4 +1,5 @@
 import {
+  getChatSession,
   regenerateChatSessionTitle,
   setChatSessionArchived,
 } from '@/lib/chat-session';
@@ -15,6 +16,20 @@ type UpdateSessionRequest = {
   archived?: boolean;
   regenerateTitle?: boolean;
 };
+
+export async function GET(
+  _request: Request,
+  context: RouteContext,
+): Promise<Response> {
+  const { sessionId } = await context.params;
+  const session = await getChatSession(sessionId);
+
+  if (session == null) {
+    return jsonError('Unknown sessionId', 404);
+  }
+
+  return Response.json({ session });
+}
 
 export async function PATCH(
   request: Request,

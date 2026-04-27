@@ -187,6 +187,22 @@ export function ChatPage({
       );
     }
   };
+
+  const refreshSessionSnapshot = useCallback(async (): Promise<StoredChatSession> => {
+    const response = await fetch(`/api/sessions/${sessionId}`);
+    const payload: unknown = await response.json();
+
+    if (!response.ok) {
+      throw new Error(readError(payload, '刷新会话失败'));
+    }
+
+    if (!isSessionPayload(payload)) {
+      throw new Error('会话响应格式无效');
+    }
+
+    return payload.session;
+  }, [sessionId]);
+
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
@@ -200,6 +216,49 @@ export function ChatPage({
 
     previousStatusRef.current = status;
   }, [status]);
+
+  useEffect(() => {
+    if (!isTurnRunning) {
+      return;
+    }
+
+    let isActive = true;
+
+    const refresh = async (): Promise<void> => {
+      try {
+        const session = await refreshSessionSnapshot();
+
+        if (!isActive) {
+          return;
+        }
+
+        setMessages(session.messages);
+        setTurnState(session.turnState);
+
+        if (session.turnState.status !== 'running') {
+          router.refresh();
+        }
+      } catch (refreshError) {
+        if (!isActive) {
+          return;
+        }
+
+        setSubmitError(
+          refreshError instanceof Error ? refreshError.message : '刷新会话失败',
+        );
+      }
+    };
+    const intervalId = window.setInterval(() => {
+      void refresh();
+    }, 2000);
+
+    void refresh();
+
+    return () => {
+      isActive = false;
+      window.clearInterval(intervalId);
+    };
+  }, [isTurnRunning, refreshSessionSnapshot, router]);
 
   const handleStop = (): void => {
     setSubmitError('后台回复已开始，关闭页面不会中断执行。');
