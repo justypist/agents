@@ -15,6 +15,13 @@
       "when": 1777274969697,
       "tag": "0001_old_wrecking_crew",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1777290236741,
+      "tag": "0002_early_hellion",
+      "breakpoints": true
     }
   ]
 }
