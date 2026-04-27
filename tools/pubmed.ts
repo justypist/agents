@@ -569,16 +569,16 @@ function cleanXmlText(value: string | undefined): string {
 
 function decodeXmlEntities(value: string): string {
   return value
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
     .replace(/&#x([0-9a-fA-F]+);/g, (_, hexValue: string) =>
       safeCodePointToString(Number.parseInt(hexValue, 16)),
     )
     .replace(/&#([0-9]+);/g, (_, decimalValue: string) =>
       safeCodePointToString(Number.parseInt(decimalValue, 10)),
     )
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
     .replace(/&amp;/g, '&');
 }
 
