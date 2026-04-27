@@ -32,7 +32,7 @@
     "react-dom": "19.2.4",
     "streamdown": "^2.5.0",
     "undici": "^8.1.0",
-    "workflow": "4.2.0-beta.76"
+    "workflow": "4.2.4"
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",
