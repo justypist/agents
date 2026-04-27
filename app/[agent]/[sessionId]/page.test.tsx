@@ -67,6 +67,12 @@ const session: StoredChatSession = {
       parts: [{ type: 'text', text: 'hello' }],
     },
   ],
+  turnState: {
+    status: 'idle',
+    currentUserMessageId: null,
+    errorSummary: null,
+    updatedAt: null,
+  },
 };
 
 describe('Chat session page', () => {

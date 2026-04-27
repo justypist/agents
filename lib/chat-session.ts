@@ -10,11 +10,35 @@ import { generateChatSessionTitle } from '@/lib/naming-agent';
 
 export const CHAT_SESSION_PAGE_SIZE = 10;
 
+export const CHAT_SESSION_TURN_STATUSES = [
+  'idle',
+  'running',
+  'completed',
+  'failed',
+] as const;
+
+export type ChatSessionTurnStatus = (typeof CHAT_SESSION_TURN_STATUSES)[number];
+
+export type ChatSessionTurnState = {
+  status: ChatSessionTurnStatus;
+  currentUserMessageId: string | null;
+  errorSummary: string | null;
+  updatedAt: string | null;
+};
+
+export type ChatSessionTurnStateUpdate = {
+  status: ChatSessionTurnStatus;
+  currentUserMessageId?: string | null;
+  errorSummary?: string | null;
+  updatedAt?: Date | null;
+};
+
 export type StoredChatSession = {
   id: string;
   agentId: string;
   title: string | null;
   messages: UIMessage[];
+  turnState: ChatSessionTurnState;
 };
 
 export type ChatSessionListItem = {
@@ -77,12 +101,19 @@ export async function getChatSession(
     agentId: session.agentId,
     title: session.title,
     messages: parseMessages(session.messages),
+    turnState: buildTurnState({
+      status: session.turnStatus,
+      currentUserMessageId: session.currentUserMessageId,
+      errorSummary: session.turnErrorSummary,
+      updatedAt: session.turnUpdatedAt,
+    }),
   };
 }
 
 export async function saveChatSessionMessages(input: {
   sessionId: string;
   messages: UIMessage[];
+  turnState?: ChatSessionTurnStateUpdate;
 }): Promise<void> {
   const existingSession = await getDb().query.chatSessions.findFirst({
     columns: {
@@ -98,6 +129,20 @@ export async function saveChatSessionMessages(input: {
     .set({
       title: nextTitle,
       messages: JSON.stringify(input.messages),
+      ...buildTurnStateUpdate(input.turnState),
+      updatedAt: new Date(),
+    })
+    .where(eq(chatSessions.id, input.sessionId));
+}
+
+export async function updateChatSessionTurnState(input: {
+  sessionId: string;
+  turnState: ChatSessionTurnStateUpdate;
+}): Promise<void> {
+  await getDb()
+    .update(chatSessions)
+    .set({
+      ...buildTurnStateUpdate(input.turnState),
       updatedAt: new Date(),
     })
     .where(eq(chatSessions.id, input.sessionId));
@@ -258,6 +303,44 @@ function parseMessages(value: string): UIMessage[] {
   }
 
   return parsed as UIMessage[];
+}
+
+function buildTurnState(input: {
+  status: string;
+  currentUserMessageId: string | null;
+  errorSummary: string | null;
+  updatedAt: Date | null;
+}): ChatSessionTurnState {
+  return {
+    status: normalizeTurnStatus(input.status),
+    currentUserMessageId: input.currentUserMessageId,
+    errorSummary: input.errorSummary,
+    updatedAt: input.updatedAt?.toISOString() ?? null,
+  };
+}
+
+function buildTurnStateUpdate(input: ChatSessionTurnStateUpdate | undefined): {
+  turnStatus?: ChatSessionTurnStatus;
+  currentUserMessageId?: string | null;
+  turnErrorSummary?: string | null;
+  turnUpdatedAt?: Date | null;
+} {
+  if (input == null) {
+    return {};
+  }
+
+  return {
+    turnStatus: input.status,
+    currentUserMessageId: input.currentUserMessageId,
+    turnErrorSummary: input.errorSummary,
+    turnUpdatedAt: input.updatedAt ?? new Date(),
+  };
+}
+
+function normalizeTurnStatus(status: string): ChatSessionTurnStatus {
+  return CHAT_SESSION_TURN_STATUSES.includes(status as ChatSessionTurnStatus)
+    ? (status as ChatSessionTurnStatus)
+    : 'idle';
 }
 
 function normalizePage(page: number | undefined): number {

@@ -56,6 +56,12 @@ const session: StoredChatSession = {
   agentId: 'default',
   title: null,
   messages: [],
+  turnState: {
+    status: 'idle',
+    currentUserMessageId: null,
+    errorSummary: null,
+    updatedAt: null,
+  },
 };
 
 const toUIMessageStreamResponse = vi.fn(
