@@ -14,7 +14,8 @@ const currentDateTimeInputSchema = jsonSchema<Record<string, never>>({
 });
 
 export const currentDateTime = tool({
-  description: '获取当前日期时间，适合处理新闻、价格、版本、活动安排等时效性问题',
+  description:
+    '获取当前日期时间；涉及新闻、价格、产品状态、版本、政策、论文进展、活动时间等可能随时间变化的信息时，应先用它确认当前时间，再判断是否需要继续核实',
   inputSchema: currentDateTimeInputSchema,
   execute: async (): Promise<CurrentDateTimeResult> => {
     const now = new Date();

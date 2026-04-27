@@ -238,7 +238,7 @@ export async function executeGenerateImage(
 
 export const generateImage = tool({
   description:
-    '调用 AI SDK generateImage 生成图片，并将结果保存到 /workspace/generated-images，返回可预览/下载的文件路径',
+    '当用户明确要求生成、绘制、制作图片或海报视觉稿时，调用 AI SDK generateImage 生成图片；结果会保存到 /workspace/generated-images，并返回可预览/下载的 /workspace 路径。回复时直接给出保存路径，或用 Markdown 图片语法引用该 /workspace 路径；不要输出 base64，不要使用 file://、本机绝对路径或 Markdown 链接包装下载路径',
   inputSchema: generateImageInputSchema,
   execute: async input => executeGenerateImage(input),
 });

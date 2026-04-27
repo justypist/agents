@@ -49,7 +49,8 @@ function clampMaxCharacters(value?: number): number {
 }
 
 export const crawl = tool({
-  description: '抓取指定网页正文内容，适合在搜索后读取候选来源页面的详细信息',
+  description:
+    '抓取指定网页正文内容，适合已有明确 URL、搜索结果或用户输入中提供可核验链接时读取来源详情、核验细节、摘取原文表述或补足 Source。优先选择权威来源 URL，例如公司官网、监管机构、临床试验登记平台、期刊原文页、新闻稿或可信数据库页面；不要把低可信聚合页作为唯一证据',
   inputSchema: crawlInputSchema,
   execute: async (
     { url, maxCharacters },

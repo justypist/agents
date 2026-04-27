@@ -129,7 +129,7 @@ const pubmedSearchInputSchema = jsonSchema<PubmedSearchToolInput>({
 
 export const pubmedSearch = tool({
   description:
-    '直接调用 PubMed E-utilities 搜索文献，返回 PMID、标题、作者、期刊、日期、DOI、链接和可选摘要',
+    '直接调用 PubMed E-utilities 搜索文献，返回 PMID、标题、作者、期刊、日期、DOI、链接和可选摘要。适合医药、生物技术、器械、靶点、机制、适应症、作者团队、机构布局、研究热点等文献证据检索；询问最新进展、近年趋势、时间窗口或最近发表情况时，应结合当前时间设置 dateFrom/dateTo 做限定检索',
   inputSchema: pubmedSearchInputSchema,
   execute: async input => executePubmedSearch(input),
 });

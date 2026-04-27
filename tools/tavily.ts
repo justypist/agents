@@ -169,7 +169,8 @@ export async function executeTavilySearch(
 }
 
 export const tavilySearch = tool({
-  description: '使用 Tavily 执行联网搜索，返回答案摘要、候选来源和裁剪后的网页片段',
+  description:
+    '使用 Tavily 执行联网搜索，返回答案摘要、候选来源和裁剪后的网页片段。成本较高，适合已有上下文、已知 URL 或领域数据库不足以回答，且需要最新事实或公开来源证据的关键场景；搜索前围绕用户目标组织关键词，并用尽量少的查询拿到足够证据。查询应包含关键实体；需要最新公告或新闻时优先使用 topic=news，并结合当前时间设置合理时间范围',
   inputSchema: tavilySearchInputSchema,
   execute: async input => executeTavilySearch(input),
 });

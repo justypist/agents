@@ -48,7 +48,8 @@ async function waitForDelay(milliseconds: number): Promise<void> {
 }
 
 export const sleep = tool({
-  description: '等待一段时间后再继续，适合处理 429 限流、短暂退避或顺序重试',
+  description:
+    '等待一段时间后再继续，适合处理 429、Too Many Requests、短暂限流退避或顺序重试；遇到 PubMed 等接口限流时通常等待 3 到 5 秒后重试，最多重试 2 次',
   inputSchema: sleepInputSchema,
   execute: async (input): Promise<SleepToolResult> => {
     const seconds = normalizeSeconds(input.seconds);
