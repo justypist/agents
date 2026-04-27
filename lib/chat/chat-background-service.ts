@@ -8,6 +8,7 @@ import {
   saveChatSessionMessages,
   type StoredChatSession,
 } from '@/lib/chat-session';
+import { generateAgentReplyMessages } from '@/lib/chat/chat-stream-service';
 
 export type SubmitChatSessionTurnResult =
   | {
@@ -109,6 +110,58 @@ export async function submitChatSessionTurn(input: {
     session: nextSession,
     userMessage,
   };
+}
+
+export async function completeChatSessionTurn(input: {
+  agentId: string;
+  sessionId: string;
+  userMessageId: string;
+}): Promise<StoredChatSession> {
+  const resolvedAgent = await resolveRequestedAgent(input.agentId);
+
+  if (resolvedAgent == null) {
+    throw new Error('Unknown agentId');
+  }
+
+  const session = await getChatSession(input.sessionId);
+
+  if (session == null) {
+    throw new Error('Unknown sessionId');
+  }
+
+  if (session.agentId !== resolvedAgent.id) {
+    throw new Error('Session does not belong to agentId');
+  }
+
+  if (
+    session.turnState.status !== 'running' ||
+    session.turnState.currentUserMessageId !== input.userMessageId
+  ) {
+    throw new Error('Chat turn is no longer running');
+  }
+
+  const messages = await generateAgentReplyMessages({
+    agent: resolvedAgent.agent,
+    messages: session.messages,
+  });
+
+  await saveChatSessionMessages({
+    sessionId: session.id,
+    messages,
+    turnState: {
+      status: 'completed',
+      currentUserMessageId: input.userMessageId,
+      errorSummary: null,
+    },
+  });
+
+  const nextSession = await getChatSession(session.id);
+
+  if (nextSession == null) {
+    throw new Error('Unknown sessionId');
+  }
+
+  return nextSession;
 }
 
 function findLastUserMessage(messages: UIMessage[]): UIMessage | null {
