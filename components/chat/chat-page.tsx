@@ -68,7 +68,12 @@ export function ChatPage({
   const [turnState, setTurnState] = useState(initialTurnState);
   const [submitStatus, setSubmitStatus] = useState<ChatSubmitStatus>('ready');
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const status = turnState.status === 'running' ? 'submitted' : submitStatus;
+  const status =
+    turnState.status === 'running'
+      ? 'submitted'
+      : turnState.status === 'failed'
+        ? 'error'
+        : submitStatus;
   const previousStatusRef = useRef(status);
   const {
     currentTitle,
@@ -103,6 +108,11 @@ export function ChatPage({
   const isTurnRunning = turnState.status === 'running';
   const isSubmitting = submitStatus === 'submitted';
   const isLoading = isSubmitting || isTurnRunning;
+  const persistentTurnError =
+    turnState.status === 'failed'
+      ? (turnState.errorSummary ?? '后台回复失败，请稍后重试。')
+      : null;
+  const displayError = submitError ?? persistentTurnError;
   const canContinueResponse = canContinue || submitError != null;
   const canSubmitMessage = !isLoading && !isUploadingFiles && !hasAttachmentErrors;
   const visibleMessages = useMemo(
@@ -483,15 +493,15 @@ export function ChatPage({
 
       <div className="border-t border-border px-4 py-4 sm:px-6">
         <div className="mx-auto w-full max-w-4xl">
-          {submitError != null ? (
+          {displayError != null ? (
             <p className="mb-3 border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-              {submitError}
+              {displayError}
             </p>
           ) : null}
           <ChatComposer
             isLoading={isSubmitting}
             isUploadingFiles={isUploadingFiles}
-            hasError={submitError != null}
+            hasError={displayError != null}
             canContinue={canContinueResponse}
             canSubmit={canSubmitMessage}
             attachments={composerAttachments}
