@@ -35,10 +35,11 @@ const session: StoredChatSession = {
   },
 };
 
-function postJson(body: unknown): Request {
+function postJson(body: unknown, signal?: AbortSignal): Request {
   return new Request('http://localhost/api/default/session-1', {
     method: 'POST',
     body: JSON.stringify(body),
+    signal,
   });
 }
 
@@ -76,6 +77,24 @@ describe('POST /api/[agentId]/[sessionId]', () => {
       requestSessionId: 'session-1',
       messages,
     });
+    expect(completeChatSessionTurn).toHaveBeenCalledWith({
+      agentId: 'default',
+      sessionId: 'session-1',
+      userMessageId: 'message-1',
+    });
+  });
+
+  it('starts background completion even if the request signal is aborted', async () => {
+    const abortController = new AbortController();
+    const request = postJson({ id: 'session-1', messages }, abortController.signal);
+    abortController.abort();
+
+    const response = await POST(request, {
+      params: Promise.resolve({ agentId: 'default', sessionId: 'session-1' }),
+    });
+
+    expect(response.status).toBe(202);
+    await expect(response.json()).resolves.toEqual({ session });
     expect(completeChatSessionTurn).toHaveBeenCalledWith({
       agentId: 'default',
       sessionId: 'session-1',
