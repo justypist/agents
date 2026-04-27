@@ -6,6 +6,7 @@ import { resolveRequestedAgent } from '@/lib/agent-registry';
 import {
   getChatSession,
   saveChatSessionMessages,
+  updateChatSessionTurnState,
   type StoredChatSession,
 } from '@/lib/chat-session';
 import { generateAgentReplyMessages } from '@/lib/chat/chat-stream-service';
@@ -164,6 +165,39 @@ export async function completeChatSessionTurn(input: {
   return nextSession;
 }
 
+export async function failChatSessionTurn(input: {
+  sessionId: string;
+  userMessageId: string;
+  error: unknown;
+}): Promise<StoredChatSession> {
+  const session = await getChatSession(input.sessionId);
+
+  if (session == null) {
+    throw new Error('Unknown sessionId');
+  }
+
+  if (session.turnState.currentUserMessageId !== input.userMessageId) {
+    throw new Error('Chat turn no longer matches failed user message');
+  }
+
+  await updateChatSessionTurnState({
+    sessionId: session.id,
+    turnState: {
+      status: 'failed',
+      currentUserMessageId: input.userMessageId,
+      errorSummary: summarizeError(input.error),
+    },
+  });
+
+  const nextSession = await getChatSession(session.id);
+
+  if (nextSession == null) {
+    throw new Error('Unknown sessionId');
+  }
+
+  return nextSession;
+}
+
 function findLastUserMessage(messages: UIMessage[]): UIMessage | null {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
@@ -174,4 +208,20 @@ function findLastUserMessage(messages: UIMessage[]): UIMessage | null {
   }
 
   return null;
+}
+
+function summarizeError(error: unknown): string {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return truncateErrorSummary(error.message.trim());
+  }
+
+  if (typeof error === 'string' && error.trim().length > 0) {
+    return truncateErrorSummary(error.trim());
+  }
+
+  return 'Agent reply failed. Please try again later.';
+}
+
+function truncateErrorSummary(value: string): string {
+  return value.length > 240 ? `${value.slice(0, 239).trimEnd()}…` : value;
 }
