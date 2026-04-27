@@ -47,6 +47,8 @@ docker compose -f compose.prod.yaml up -d
 
 - 访问 `/` 会先跳转到 `/default`
 - 访问 `/{agentId}` 会在请求时创建新 session，再跳转到 `/{agentId}/{sessionId}`
+- 访问 `/skills` 可管理数据库中的 skills；新建或聊天生成的 skill 默认停用，需要手动启用后才参与聊天调用
+- 聊天输入开头可用 `/{skill-name}` 显式调用已启用 skill，例如 `/research-plan 帮我整理这段信息`
 
 ### Create Session
 
@@ -107,3 +109,13 @@ curl -N \
 ### API响应格式
 
 https://ai-sdk.dev/docs/reference/ai-sdk-core/ui-message
+
+### Skills API
+
+- `GET /api/skills`：列出 skills，可用 `?status=enabled|disabled` 过滤
+- `POST /api/skills`：创建 skill，字段为 `name`、`displayName`、`description`、`content`
+- `GET /api/skills/<skillId>`：读取 skill
+- `PATCH /api/skills/<skillId>`：更新 skill 字段或 `status`
+- `POST /api/skills/from-session`：从选中的聊天消息生成新 skill
+- `POST /api/skills/<skillId>/adjust-from-session`：用选中的聊天消息调整已有 skill
+- `POST /api/skills/rewrite-selection`：为 skill editor 的选区生成可编辑替换候选

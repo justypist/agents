@@ -3,6 +3,10 @@ import { ToolLoopAgent, stepCountIs } from 'ai';
 import { options } from '@/lib/ai';
 import { currentDateTime } from '@/tools/current-date-time';
 import { crawl } from '@/tools/crawl';
+import {
+  readDatabaseSkillTool,
+  searchDatabaseSkillsTool,
+} from '@/tools/database-skills';
 import { pubmedSearch } from '@/tools/pubmed';
 import { sleep } from '@/tools/sleep';
 import { tavilySearch } from '@/tools/tavily';
@@ -18,6 +22,7 @@ export const competitiveIntelligenceInstructions = [
   '公司和临床几期如果原始文献未直接提及，必须明确标记为“未提及”或“需推断”，不要编造。',
   '输出尽量覆盖：研究主题、代表性论文、关键作者/机构、时间分布、潜在竞争方向，以及信息盲区。',
   '如果检索结果不足或范围受限，要直接说明，并提示当前 agent 主要依赖 PubMed 与可抓取的公开网页。',
+  '如当前任务可能受益于用户沉淀的数据库 skill，可先检索 enabled skill 候选，再按需读取完整内容；不要从文件系统读取 skill。',
 ].join('\n');
 
 export const agent = new ToolLoopAgent({
@@ -28,6 +33,8 @@ export const agent = new ToolLoopAgent({
     currentDateTime,
     crawl,
     pubmedSearch,
+    readDatabaseSkillTool,
+    searchDatabaseSkillsTool,
     sleep,
     tavilySearch,
   },

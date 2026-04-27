@@ -14,6 +14,7 @@ import {
 } from 'ai';
 import { resolveRequestedAgent } from '@/lib/agent-registry';
 import { getChatSession, saveChatSessionMessages } from '@/lib/chat-session';
+import { getEnabledSkillByName } from '@/lib/skills';
 
 vi.mock('ai', () => ({
   consumeStream: vi.fn(),
@@ -29,6 +30,10 @@ vi.mock('@/lib/agent-registry', () => ({
 vi.mock('@/lib/chat-session', () => ({
   getChatSession: vi.fn(),
   saveChatSessionMessages: vi.fn(),
+}));
+
+vi.mock('@/lib/skills', () => ({
+  getEnabledSkillByName: vi.fn(),
 }));
 
 const messages: UIMessage[] = [
@@ -78,6 +83,7 @@ describe('streamChatSessionTurn', () => {
     vi.mocked(getChatSession).mockResolvedValue(session);
     vi.mocked(validateUIMessages).mockResolvedValue(messages);
     vi.mocked(convertToModelMessages).mockResolvedValue(modelMessages);
+    vi.mocked(getEnabledSkillByName).mockResolvedValue(null);
     vi.mocked(saveChatSessionMessages).mockResolvedValue(undefined);
     toUIMessageStreamResponse.mockClear();
     agentStream.mockClear();
@@ -166,5 +172,77 @@ describe('streamChatSessionTurn', () => {
       sessionId: 'session-1',
       messages,
     });
+  });
+
+  it('injects explicitly invoked enabled skills and strips the prefix for the model', async () => {
+    const invokedMessages: UIMessage[] = [
+      {
+        id: 'message-1',
+        role: 'user',
+        parts: [{ type: 'text', text: '/research-plan 帮我整理信息' }],
+      },
+    ];
+    vi.mocked(validateUIMessages).mockResolvedValue(invokedMessages);
+    vi.mocked(getEnabledSkillByName).mockResolvedValue({
+      id: 'skill-1',
+      name: 'research-plan',
+      displayName: 'Research Plan',
+      description: 'Plan research tasks',
+      content: 'Use structured research steps.',
+      status: 'enabled',
+      sourceSessionId: null,
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+    });
+
+    const response = await streamChatSessionTurn({
+      agentId: 'default',
+      sessionId: 'session-1',
+      messages: invokedMessages,
+    });
+
+    expect(response.status).toBe(202);
+    expect(getEnabledSkillByName).toHaveBeenCalledWith('research-plan');
+    expect(convertToModelMessages).toHaveBeenCalledWith([
+      {
+        id: 'message-1',
+        role: 'user',
+        parts: [{ type: 'text', text: '帮我整理信息' }],
+      },
+    ]);
+    expect(agentStream).toHaveBeenCalledWith({
+      messages: [
+        expect.objectContaining({
+          role: 'system',
+          content: expect.stringContaining('/research-plan'),
+        }),
+        ...modelMessages,
+      ],
+      abortSignal: undefined,
+    });
+  });
+
+  it('rejects explicit calls for missing or disabled skills', async () => {
+    const invokedMessages: UIMessage[] = [
+      {
+        id: 'message-1',
+        role: 'user',
+        parts: [{ type: 'text', text: '/research-plan 帮我整理信息' }],
+      },
+    ];
+    vi.mocked(validateUIMessages).mockResolvedValue(invokedMessages);
+    vi.mocked(getEnabledSkillByName).mockResolvedValue(null);
+
+    const response = await streamChatSessionTurn({
+      agentId: 'default',
+      sessionId: 'session-1',
+      messages: invokedMessages,
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: 'Skill "research-plan" is not available',
+    });
+    expect(agentStream).not.toHaveBeenCalled();
   });
 });
