@@ -34,6 +34,7 @@ vi.mock('@/components/chat/chat-page', () => ({
     agentId: string;
     sessionId: string;
     initialMessages: UIMessage[];
+    initialTurnState: StoredChatSession['turnState'];
     initialTitle: string | null;
     fallbackTitle: string;
     initialSkills: unknown[];

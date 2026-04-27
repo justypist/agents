@@ -1,7 +1,6 @@
 'use client';
 
-import { useChat } from '@ai-sdk/react';
-import { DefaultChatTransport, type FileUIPart, type UIMessage } from 'ai';
+import { generateId, type FileUIPart, type UIMessage } from 'ai';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -12,21 +11,24 @@ import { useChatSessionActions } from '@/components/chat/hooks/use-chat-session-
 import { useToolTimings } from '@/components/chat/hooks/use-tool-timings';
 import { ChatHeader } from '@/components/chat/layout/chat-header';
 import { ChatMessageList } from '@/components/chat/message/chat-message-list';
-import { normalizeInterruptedMessages } from '@/components/chat/message/normalize-interrupted-messages';
 import type { ExpandedStateMap } from '@/components/chat/types';
 import { SkillEditor } from '@/components/skills/skill-editor';
 import type { SkillView } from '@/components/skills/types';
+import type { ChatSessionTurnState, StoredChatSession } from '@/lib/chat-session';
 
 type ChatPageProps = {
   agentId: string;
   sessionId: string;
   initialMessages: UIMessage[];
+  initialTurnState: ChatSessionTurnState;
   initialTitle: string | null;
   fallbackTitle: string;
   initialSkills: SkillView[];
 };
 
 type SkillSelectionMode = 'create' | 'adjust';
+
+type ChatSubmitStatus = 'ready' | 'submitted' | 'error';
 
 type DraftSkillForm = {
   id: string;
@@ -40,6 +42,7 @@ export function ChatPage({
   agentId,
   sessionId,
   initialMessages,
+  initialTurnState,
   initialTitle,
   fallbackTitle,
   initialSkills,
@@ -61,19 +64,11 @@ export function ChatPage({
   const [skillPanelMessage, setSkillPanelMessage] = useState<string | null>(null);
   const [isGeneratingSkill, setIsGeneratingSkill] = useState(false);
   const [isSavingDraftSkill, setIsSavingDraftSkill] = useState(false);
-  const stopRequestedRef = useRef(false);
-  const { messages, sendMessage, setMessages, status, stop, error, clearError } =
-    useChat({
-      id: sessionId,
-      messages: initialMessages,
-      experimental_throttle: 50,
-      onFinish: () => {
-        router.refresh();
-      },
-      transport: new DefaultChatTransport({
-        api: `/api/${agentId}/${sessionId}`,
-      }),
-    });
+  const [messages, setMessages] = useState(initialMessages);
+  const [turnState, setTurnState] = useState(initialTurnState);
+  const [submitStatus, setSubmitStatus] = useState<ChatSubmitStatus>('ready');
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const status = turnState.status === 'running' ? 'submitted' : submitStatus;
   const previousStatusRef = useRef(status);
   const {
     currentTitle,
@@ -105,8 +100,10 @@ export function ChatPage({
   } = useChatAutoScroll({ messages, status });
   const toolTimings = useToolTimings(messages);
 
-  const isLoading = status === 'submitted' || status === 'streaming';
-  const canContinueResponse = canContinue || error != null;
+  const isTurnRunning = turnState.status === 'running';
+  const isSubmitting = submitStatus === 'submitted';
+  const isLoading = isSubmitting || isTurnRunning;
+  const canContinueResponse = canContinue || submitError != null;
   const canSubmitMessage = !isLoading && !isUploadingFiles && !hasAttachmentErrors;
   const visibleMessages = useMemo(
     () =>
@@ -117,7 +114,7 @@ export function ChatPage({
   );
   const lastMessage = visibleMessages[visibleMessages.length - 1];
   const shouldShowPendingReply =
-    isLoading &&
+    (isLoading || isTurnRunning) &&
     (lastMessage == null || lastMessage.role !== 'assistant');
 
   const submitMessage = (input: string): void => {
@@ -134,15 +131,61 @@ export function ChatPage({
     }));
 
     setCanContinue(false);
+    setSubmitError(null);
     scrollToBottom('smooth');
-    void sendMessage(
-      files.length > 0 && trimmedInput.length > 0
-        ? { text: trimmedInput, files }
-          : files.length > 0
-            ? { files }
-            : { text: trimmedInput },
-    );
+    const userMessage: UIMessage = {
+      id: generateId(),
+      role: 'user',
+      parts: [
+        ...(trimmedInput.length > 0
+          ? [{ type: 'text' as const, text: trimmedInput }]
+          : []),
+        ...files,
+      ],
+    };
+    const nextMessages = [...messages, userMessage];
+
+    setMessages(nextMessages);
+    setTurnState({
+      status: 'running',
+      currentUserMessageId: userMessage.id,
+      errorSummary: null,
+      updatedAt: new Date().toISOString(),
+    });
+    setSubmitStatus('submitted');
+    void submitTurn(nextMessages);
     clearAttachments();
+  };
+
+  const submitTurn = async (nextMessages: UIMessage[]): Promise<void> => {
+    try {
+      const response = await fetch(`/api/${agentId}/${sessionId}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id: sessionId, messages: nextMessages }),
+      });
+      const payload: unknown = await response.json();
+
+      if (!response.ok) {
+        throw new Error(readError(payload, '发送消息失败'));
+      }
+
+      if (!isSessionPayload(payload)) {
+        throw new Error('会话响应格式无效');
+      }
+
+      setMessages(payload.session.messages);
+      setTurnState(payload.session.turnState);
+      setSubmitStatus('ready');
+      router.refresh();
+    } catch (submitErrorValue) {
+      setSubmitStatus('error');
+      setSubmitError(
+        submitErrorValue instanceof Error
+          ? submitErrorValue.message
+          : '发送消息失败',
+      );
+    }
   };
   useEffect(() => {
     inputRef.current?.focus();
@@ -151,41 +194,15 @@ export function ChatPage({
   useEffect(() => {
     const previousStatus = previousStatusRef.current;
 
-    if (
-      status === 'ready' &&
-      (previousStatus === 'submitted' || previousStatus === 'streaming')
-    ) {
+    if (status === 'ready' && previousStatus === 'submitted') {
       inputRef.current?.focus();
     }
 
     previousStatusRef.current = status;
   }, [status]);
 
-  useEffect(() => {
-    if (isLoading || !stopRequestedRef.current) {
-      return;
-    }
-
-    stopRequestedRef.current = false;
-    setMessages(previousMessages =>
-      normalizeInterruptedMessages(previousMessages, '已停止'),
-    );
-  }, [isLoading, setMessages]);
-
-  useEffect(() => {
-    if (isLoading || error == null) {
-      return;
-    }
-
-    setMessages(previousMessages =>
-      normalizeInterruptedMessages(previousMessages, '请求中断'),
-    );
-  }, [error, isLoading, setMessages]);
-
   const handleStop = (): void => {
-    setCanContinue(true);
-    stopRequestedRef.current = true;
-    void stop();
+    setSubmitError('后台回复已开始，关闭页面不会中断执行。');
   };
 
   const handleContinue = (): void => {
@@ -194,10 +211,8 @@ export function ChatPage({
     }
 
     setCanContinue(false);
-    clearError();
-    void sendMessage({
-      text: '请从上一条助手回复中断的位置继续，不要重复已经完成的内容。只补全后续内容。',
-    });
+    setSubmitError(null);
+    submitMessage('请从上一条助手回复中断的位置继续，不要重复已经完成的内容。只补全后续内容。');
   };
 
   const toggleExpanded = useCallback((key: string, currentExpanded: boolean): void => {
@@ -409,10 +424,15 @@ export function ChatPage({
 
       <div className="border-t border-border px-4 py-4 sm:px-6">
         <div className="mx-auto w-full max-w-4xl">
+          {submitError != null ? (
+            <p className="mb-3 border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {submitError}
+            </p>
+          ) : null}
           <ChatComposer
-            isLoading={isLoading}
+            isLoading={isSubmitting}
             isUploadingFiles={isUploadingFiles}
-            hasError={error != null}
+            hasError={submitError != null}
             canContinue={canContinueResponse}
             canSubmit={canSubmitMessage}
             attachments={composerAttachments}
@@ -635,6 +655,49 @@ function isSkill(value: unknown): value is SkillView {
     (typeof candidate.sourceSessionId === 'string' || candidate.sourceSessionId == null) &&
     typeof candidate.createdAt === 'string' &&
     typeof candidate.updatedAt === 'string'
+  );
+}
+
+function isSessionPayload(value: unknown): value is { session: StoredChatSession } {
+  if (typeof value !== 'object' || value == null) {
+    return false;
+  }
+
+  return isStoredChatSession((value as Record<string, unknown>).session);
+}
+
+function isStoredChatSession(value: unknown): value is StoredChatSession {
+  if (typeof value !== 'object' || value == null) {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+
+  return (
+    typeof candidate.id === 'string' &&
+    typeof candidate.agentId === 'string' &&
+    (typeof candidate.title === 'string' || candidate.title == null) &&
+    Array.isArray(candidate.messages) &&
+    isTurnState(candidate.turnState)
+  );
+}
+
+function isTurnState(value: unknown): value is ChatSessionTurnState {
+  if (typeof value !== 'object' || value == null) {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+
+  return (
+    (candidate.status === 'idle' ||
+      candidate.status === 'running' ||
+      candidate.status === 'completed' ||
+      candidate.status === 'failed') &&
+    (typeof candidate.currentUserMessageId === 'string' ||
+      candidate.currentUserMessageId == null) &&
+    (typeof candidate.errorSummary === 'string' || candidate.errorSummary == null) &&
+    (typeof candidate.updatedAt === 'string' || candidate.updatedAt == null)
   );
 }
 

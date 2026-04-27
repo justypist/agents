@@ -35,6 +35,7 @@ export default async function ChatSessionPage({ params }: ChatSessionPageProps) 
       agentId={resolvedAgent.id}
       sessionId={session.id}
       initialMessages={session.messages}
+      initialTurnState={session.turnState}
       initialTitle={session.title}
       fallbackTitle={resolvedAgent.displayName}
       initialSkills={skills.map(serializeSkill)}
