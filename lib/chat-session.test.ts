@@ -90,6 +90,10 @@ async function loadModules(): Promise<{
       agent_id text NOT NULL,
       title text,
       messages text NOT NULL,
+      turn_status text DEFAULT 'idle' NOT NULL,
+      current_user_message_id text,
+      turn_error_summary text,
+      turn_updated_at timestamp with time zone,
       archived_at timestamp with time zone,
       created_at timestamp with time zone NOT NULL,
       updated_at timestamp with time zone NOT NULL
@@ -168,6 +172,15 @@ function textMessage(id: string, text: string, role: UIMessage['role'] = 'user')
   };
 }
 
+function idleTurnState() {
+  return {
+    status: 'idle',
+    currentUserMessageId: null,
+    errorSummary: null,
+    updatedAt: null,
+  } as const;
+}
+
 describe('chat-session persistence', () => {
   it('creates sessions and reads stored messages', async () => {
     const { chatSession, db } = await loadModules();
@@ -179,6 +192,7 @@ describe('chat-session persistence', () => {
       agentId: 'default',
       title: null,
       messages: [],
+      turnState: idleTurnState(),
     });
 
     await insertSession({
@@ -192,6 +206,7 @@ describe('chat-session persistence', () => {
       agentId: 'default',
       title: null,
       messages: [textMessage('message-1', 'hello')],
+      turnState: idleTurnState(),
     });
     await expect(chatSession.getChatSession('missing')).resolves.toBeNull();
   });
@@ -253,6 +268,60 @@ describe('chat-session persistence', () => {
       title: 'Existing title',
     });
     expect(generatedTitle).toHaveBeenCalledTimes(1);
+  });
+
+  it('reads and updates background turn state', async () => {
+    const { chatSession, db } = await loadModules();
+
+    await insertSession({
+      db: db.getDb(),
+      id: 'turn-session',
+      messages: [],
+    });
+
+    await expect(chatSession.getChatSession('turn-session')).resolves.toMatchObject({
+      turnState: idleTurnState(),
+    });
+
+    await chatSession.updateChatSessionTurnState({
+      sessionId: 'turn-session',
+      turnState: {
+        status: 'running',
+        currentUserMessageId: 'message-1',
+        errorSummary: null,
+        updatedAt: new Date('2026-01-02T00:00:00.000Z'),
+      },
+    });
+
+    await expect(chatSession.getChatSession('turn-session')).resolves.toMatchObject({
+      turnState: {
+        status: 'running',
+        currentUserMessageId: 'message-1',
+        errorSummary: null,
+        updatedAt: '2026-01-02T00:00:00.000Z',
+      },
+    });
+
+    await chatSession.saveChatSessionMessages({
+      sessionId: 'turn-session',
+      messages: [textMessage('message-1', 'hello')],
+      turnState: {
+        status: 'failed',
+        currentUserMessageId: 'message-1',
+        errorSummary: 'Agent failed',
+        updatedAt: new Date('2026-01-03T00:00:00.000Z'),
+      },
+    });
+
+    await expect(chatSession.getChatSession('turn-session')).resolves.toMatchObject({
+      messages: [textMessage('message-1', 'hello')],
+      turnState: {
+        status: 'failed',
+        currentUserMessageId: 'message-1',
+        errorSummary: 'Agent failed',
+        updatedAt: '2026-01-03T00:00:00.000Z',
+      },
+    });
   });
 
   it('lists active and archived sessions with pagination metadata', async () => {
