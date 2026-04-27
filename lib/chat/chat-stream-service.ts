@@ -11,6 +11,11 @@ import {
 import { jsonError } from '@/lib/api/responses';
 import { resolveRequestedAgent } from '@/lib/agent-registry';
 import { getChatSession, saveChatSessionMessages } from '@/lib/chat-session';
+import {
+  discoverProjectSkills,
+  injectSkillsIntoMessages,
+  selectSkillsForMessages,
+} from '@/lib/skills';
 
 const generateMessageId = createIdGenerator({
   prefix: 'msg',
@@ -48,8 +53,10 @@ export async function streamChatSessionTurn(input: {
     messages: input.messages,
   });
   const modelMessages = await convertToModelMessages(validatedMessages);
+  const { skills } = await discoverProjectSkills();
+  const selectedSkills = selectSkillsForMessages(skills, modelMessages);
   const result = await resolvedAgent.agent.stream({
-    messages: modelMessages,
+    messages: injectSkillsIntoMessages(modelMessages, selectedSkills),
     abortSignal: input.abortSignal,
   });
 

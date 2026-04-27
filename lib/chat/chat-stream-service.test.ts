@@ -14,6 +14,11 @@ import {
 } from 'ai';
 import { resolveRequestedAgent } from '@/lib/agent-registry';
 import { getChatSession, saveChatSessionMessages } from '@/lib/chat-session';
+import {
+  discoverProjectSkills,
+  injectSkillsIntoMessages,
+  selectSkillsForMessages,
+} from '@/lib/skills';
 
 vi.mock('ai', () => ({
   consumeStream: vi.fn(),
@@ -29,6 +34,12 @@ vi.mock('@/lib/agent-registry', () => ({
 vi.mock('@/lib/chat-session', () => ({
   getChatSession: vi.fn(),
   saveChatSessionMessages: vi.fn(),
+}));
+
+vi.mock('@/lib/skills', () => ({
+  discoverProjectSkills: vi.fn(),
+  injectSkillsIntoMessages: vi.fn((messages: ModelMessage[]) => messages),
+  selectSkillsForMessages: vi.fn(() => []),
 }));
 
 const messages: UIMessage[] = [
@@ -78,6 +89,9 @@ describe('streamChatSessionTurn', () => {
     vi.mocked(getChatSession).mockResolvedValue(session);
     vi.mocked(validateUIMessages).mockResolvedValue(messages);
     vi.mocked(convertToModelMessages).mockResolvedValue(modelMessages);
+    vi.mocked(discoverProjectSkills).mockResolvedValue({ skills: [], errors: [] });
+    vi.mocked(selectSkillsForMessages).mockReturnValue([]);
+    vi.mocked(injectSkillsIntoMessages).mockImplementation(messages => messages);
     vi.mocked(saveChatSessionMessages).mockResolvedValue(undefined);
     toUIMessageStreamResponse.mockClear();
     agentStream.mockClear();
@@ -150,6 +164,9 @@ describe('streamChatSessionTurn', () => {
     expect(response.status).toBe(202);
     expect(validateUIMessages).toHaveBeenCalledWith({ messages });
     expect(convertToModelMessages).toHaveBeenCalledWith(messages);
+    expect(discoverProjectSkills).toHaveBeenCalledWith();
+    expect(selectSkillsForMessages).toHaveBeenCalledWith([], modelMessages);
+    expect(injectSkillsIntoMessages).toHaveBeenCalledWith(modelMessages, []);
     expect(agentStream).toHaveBeenCalledWith({
       messages: modelMessages,
       abortSignal: abortController.signal,
