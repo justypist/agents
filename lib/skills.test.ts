@@ -151,6 +151,15 @@ describe('skill validation', () => {
       },
     });
   });
+
+  it('rejects blank display name updates', async () => {
+    const { skills } = await loadModules();
+
+    expect(skills.parseUpdateSkillInput({ displayName: '   ' })).toEqual({
+      ok: false,
+      error: 'Skill display name is required',
+    });
+  });
 });
 
 describe('skill persistence', () => {

@@ -162,6 +162,10 @@ export function parseUpdateSkillInput(
       return { ok: false, error: 'Skill display name is too long' };
     }
 
+    if (displayName.trim().length === 0) {
+      return { ok: false, error: 'Skill display name is required' };
+    }
+
     input.displayName = displayName.trim();
   }
 
