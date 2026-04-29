@@ -23,7 +23,7 @@
     "@aws-sdk/s3-request-presigner": "^3.1037.0",
     "@next/env": "^16.2.4",
     "@noble/hashes": "^2.2.0",
-    "@tavily/core": "^0.7.2",
+    "@tavily/core": "^0.7.3",
     "ai": "^6.0.168",
     "drizzle-orm": "0.45.2",
     "next": "16.2.4",
